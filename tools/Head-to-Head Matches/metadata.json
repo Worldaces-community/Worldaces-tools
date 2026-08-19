@@ -1,0 +1,9 @@
+{
+  "name": "H2H Matches",
+  "description": "Head-to-head match statistics tool for World Aces teams",
+  "author": "@Azinekel",
+  "tags": ["match", "h2h", "statistics"],
+  "entrypoint": "H2HMatches.ipynb",
+  "runnable_in_browser": false,
+  "browser_entry": "H2HMatches.ipynb"
+}
