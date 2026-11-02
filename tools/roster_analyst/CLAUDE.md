@@ -1,6 +1,7 @@
 # Roster Analyst
 
-Règles du moteur : @DESIGN.md — utilisation : @README.md
+Engine rules: @DESIGN.md — usage: @README.md
 
-Toujours faire tourner `npm run typecheck` et `npm run analyze -- example_roster.csv example_params.json` avant de pousser.
-La documentation des règles vit dans DESIGN.md (pas de texte méthodologique dans le rapport).
+Everything in this repository is in English (code output, report, docs).
+Always run `npm run typecheck` and `npm run analyze -- example_roster.csv example_params.json`
+before pushing. The rules are documented in DESIGN.md (no methodology text in the report).

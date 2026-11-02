@@ -9,7 +9,6 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { parseCSVText } from "../src/models/playerParser";
 import { hasRole } from "../src/utils/helpers";
-import { SIGN_LABELS_FR } from "../src/config/signs";
 import type { Player, Sign } from "../src/types";
 import {
     EditableParams, ROLES, ROLE_TITLES, STATS, TRAITS, SIGNS, RANGES,
@@ -191,7 +190,7 @@ function renderRolePanel(): void {
         get: () => cfg.traitBonuses[t] ?? 0, set: (v) => (cfg.traitBonuses[t] = v),
     }));
     const signCtl = SIGNS.map((s) => slider({
-        label: `${s} · ${SIGN_LABELS_FR[s as Sign]}`,
+        label: s,
         help: role === "libero" ? LIBERO_SIGN_HELP[s] : role === "setter" ? "Setters have no sign effect (only the setter–attacker connection)" : SIGN_HELP[s],
         ...RANGES.sign, compact: true,
         get: () => cfg.signBonuses[s] ?? 0, set: (v) => (cfg.signBonuses[s] = v),

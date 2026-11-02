@@ -1,304 +1,280 @@
-# Roster Analyst — règles du moteur
+# Roster Analyst — engine rules
 
-Documentation de référence du moteur d'analyse (en français, comme le rapport).
-Pour l'utilisation, voir [README.md](./README.md).
+Reference documentation of the analysis engine. For usage, see [README.md](./README.md).
 
-Le moteur lit un CSV de joueurs + un `params.json` (profils par rôle + réglages) et produit
-un rapport : classements par rôle, lineup 5-1 recommandé (titulaires / banc / réservistes +
-chimie des signes + rotation réception/service des libéros), Academy & progression, points
-faibles & filtre de recrutement, joueurs à vendre.
+The engine reads a player CSV + a `params.json` (role profiles + settings) and produces a
+report: role rankings, recommended 5-1 lineup (starters / bench / injury reserves + sign
+chemistry + reception/serve rotation of the liberos), academy & progression, weak spots &
+recruitment filter, players to sell.
 
-**Aucun profil n'est fourni** : chaque manager construit le sien (éditeur web → export
-`params.json`). `example_params.json` est un template neutre (toutes les stats à 5, aucun
-bonus) qui sert uniquement d'exemple et de test.
+**No tuned profile is shipped**: every manager builds their own (web editor → export
+`params.json`). `example_params.json` is a neutral template (all stats at 5, no bonus) used
+only as an example and for tests.
 
-## Structure du code
-- `src/analyze.ts` — orchestration (`runAnalysis`), sans dépendance Node : partagé par la CLI et le web.
-- `src/cli.ts` — CLI Node (lecture des fichiers, sortie console + `--md`).
-- `src/models/playerParser.ts` — `parseCSVText` : lecture du CSV (colonnes FR, alias de traits et de signes FR→EN).
-- `src/config/` — `constants.ts` (libellés, stats, traits, constantes libéro, paires
-  exclusives), `settings.ts` (**réglages utilisateur** : seuils, poids du MILP, quotas — bloc
-  `settings` du params.json, défauts neutres), `roleConfig.ts` (`normalizeParams` /
-  `parseParams`, `idealScore`, sous-profils libéro), `signs.ts` (signes, alias FR, matrice de
-  chimie, seuils, effets libéro).
+## Code layout
+- `src/analyze.ts` — orchestration (`runAnalysis`), Node-free: shared by the CLI and the web app.
+- `src/cli.ts` — Node CLI (file reading, console output + `--md`).
+- `src/models/playerParser.ts` — `parseCSVText`: CSV reading (French headers, French → English
+  aliases for roles, traits, rarities, signs).
+- `src/config/` — `constants.ts` (labels, stats, traits, libero constants, exclusive pairs),
+  `settings.ts` (**user settings**: thresholds, MILP weights, quotas — `settings` block of
+  params.json, neutral defaults), `roleConfig.ts` (`normalizeParams` / `parseParams`,
+  `idealScore`, libero sub-profiles), `signs.ts` (signs, French aliases, chemistry matrix,
+  thresholds, libero effects).
 - `src/scoring/scorer.ts` — `scorePlayer`, `rankForRole`.
-- `src/lineup/lineupBuilder.ts` — MILP mono-passe du 5-1 (titulaires + banc + réservistes)
-  + optimisation exacte de la synergie des signes.
-- `src/lineup/assignment.ts` — affectation max (algorithme hongrois) pour les bornes du
-  branch & bound de la synergie.
-- `src/lineup/signChemistry.ts` — modèle de chimie du terrain 5-1.
-- `src/analysis/` — `availabilityAnalyzer` (Academy + progression → pool lineup),
+- `src/lineup/lineupBuilder.ts` — single-pass MILP of the 5-1 (starters + bench + reserves)
+  + exact sign-chemistry optimisation.
+- `src/lineup/assignment.ts` — maximum assignment (Hungarian algorithm) for the bounds of the
+  chemistry branch & bound.
+- `src/lineup/signChemistry.ts` — chemistry model of the 5-1 court.
+- `src/analysis/` — `availabilityAnalyzer` (academy + progress → lineup pool),
   `academyAnalyzer`, `liberoRotationAnalyzer`, `weaknessAnalyzer`, `recruitmentAnalyzer`,
   `rosterBalanceAnalyzer`.
-- `src/report/` — interface `Reporter`, `ConsoleReporter`, `MarkdownReporter`, `formatters`.
-- `src/tools/verifyLineup.ts` — vérification du lineup builder contre une énumération
-  exhaustive (`npm run verify-lineup -- <roster.csv> <params.json> [nbJoueurs] [graine]`).
-- `web/` — application navigateur : `app.ts` (éditeur de params, import CSV, rendu du
-  rapport), `worker.ts` (analyse dans un Web Worker), `schema.ts` (template neutre,
-  import/export du params.json, aides), `build.mjs` (esbuild → `web/dist/`).
+- `src/report/` — `Reporter` interface, `ConsoleReporter`, `MarkdownReporter`, `formatters`.
+- `src/tools/verifyLineup.ts` — checks the lineup builder against an exhaustive enumeration
+  (`npm run verify-lineup -- <roster.csv> <params.json> [nbPlayers] [seed]`).
+- `web/` — browser app: `app.ts` (params editor, CSV import, report rendering), `worker.ts`
+  (analysis in a Web Worker), `schema.ts` (neutral template, params.json import/export, help
+  texts), `build.mjs` (esbuild → `web/dist/`).
 
-**Règle** : rien sous `src/` (hors `cli.ts` et `src/tools/`) ne doit dépendre de Node —
-`npm run typecheck` le vérifie (le tsconfig web n'a pas les types Node).
+**Rule**: nothing under `src/` (except `cli.ts` and `src/tools/`) may depend on Node —
+`npm run typecheck` enforces it (the web tsconfig has no Node types).
 
-## Réglages (`settings`)
-Tout ce qui est un choix de l'utilisateur est dans `settings` (cf. `src/config/settings.ts`,
-défauts dans `DEFAULT_SETTINGS`). Un réglage absent prend sa valeur par défaut ; une clé
-inconnue ou d'un mauvais type est ignorée avec un avertissement.
+## Settings (`settings`)
+Every user choice lives in `settings` (see `src/config/settings.ts`, defaults in
+`DEFAULT_SETTINGS`). A missing setting takes its default; an unknown key or a value of the
+wrong type is ignored with a warning.
 
-| Réglage | Rôle |
+| Setting | Purpose |
 |---|---|
-| `balanceExponent` | exposant de la moyenne de puissance des stats (1 = moyenne pondérée) |
-| `lineup.subObjectiveWeight` / `reserveObjectiveWeight` | λ / λᵣ du MILP 5-1 (0 < λᵣ < λ < 1) |
-| `lineup.signSynergy` | optimisation exacte de la chimie des signes |
-| `lineup.synergyTimeLimitSec` | garde-fou du branch & bound |
-| `availability.declineExceptionalMinGain` | gain mini pour garder un « Starting to decline » |
-| `academy.maxAge` | âge max (inclus) d'éligibilité à l'Academy |
-| `libero.subMinDelta` | Δ mini pour conseiller la rotation des libéros |
-| `roster.target` / `roster.targetCounts` | taille de roster visée et quota max par rôle |
-| `recruitment.singletonTraits` / `singletonPriorityBonus` / `singletonTraitPositions` | traits « à un seul porteur » au recrutement |
+| `balanceExponent` | exponent of the power mean of the stats (1 = weighted average) |
+| `lineup.subObjectiveWeight` / `reserveObjectiveWeight` | λ / λᵣ of the 5-1 MILP (0 < λᵣ < λ < 1) |
+| `lineup.signSynergy` | exact sign-chemistry optimisation |
+| `lineup.synergyTimeLimitSec` | branch & bound time limit |
+| `availability.declineExceptionalMinGain` | minimum gain to keep a "Starting to decline" player |
+| `academy.maxAge` | maximum (inclusive) academy-eligible age |
+| `libero.subMinDelta` | minimum gap to advise the libero rotation |
+| `roster.target` / `roster.targetCounts` | target roster size and max quota per role |
+| `recruitment.singletonTraits` / `singletonPriorityBonus` / `singletonTraitPositions` | "single-carrier" traits in recruitment |
 
-Les constantes de **mécanique du jeu** (matrice des signes, seuils d'activation, +10 % de
-victoire, paires exclusives, traits redondants, découpage réception/défense du libéro)
-restent dans le code.
+**Game mechanics** constants (sign matrix, activation thresholds, +10 % win chance,
+exclusive pairs, redundant traits, reception/defense split of the libero) stay in the code.
 
-## Règles d'affichage & modélisation du rapport
+## Report & modelling rules
 
-- **Sections du rapport** (numérotées dynamiquement, la numérotation suit ce qui est
-  réellement affiché) : 1. Classements par rôle · 2. Lineup 5-1 recommandé · 3. Academy &
-  progression · 4. Points faibles + filtre de recrutement · 5. Gestion du roster — joueurs
-  à vendre (si roster > `settings.roster.target` **ou** s'il y a des non-progressants à libérer). Tout le reste (6-2, lineup d'entraînement, comparatif des lineups,
-  instructions de rotation / % de passe / tempo, profils tactiques, priorités
-  d'entraînement, placement du libéro) a été **supprimé à la demande de l'utilisateur**.
-- **Double sortie console + markdown** : `--md <fichier>` écrit en plus le rapport en
-  markdown GitHub (`MarkdownReporter`, même contenu que la console via l'interface
-  commune `Reporter`). L'application web affiche ce même markdown (rendu HTML) ; en CI on peut le publier dans
-  le **job summary** (`$GITHUB_STEP_SUMMARY`), lisible sur mobile.
-- **Markdown navigable par blocs repliables** (demande utilisateur) : chaque section
-  numérotée est un `<details open>` avec son `<h2>` dans le `<summary>` (titre
-  cliquable, repliable), et chaque sous-bloc (tables détaillées, rotation libéro,
-  recrutement…) un `<details>` replié par défaut avec son **verdict résumé dans le titre**.
-- **Tableau RÉCAPITULATIF du lineup (saisie en jeu)** : toujours visible en tête de la
-  section 5-1 — une ligne par position (ordre terrain), colonnes Titulaire /
-  Remplaçant (avec Δ) / Rés. blessure. Les tables détaillées (rareté, scores) restent
-  dessous (repliées en markdown).
-- **Pas de texte méthodologique dans le rapport** (demande utilisateur) : c'est CE
-  fichier qui documente les règles. Ne garder dans le rapport que les données, verdicts
-  et légendes de symboles courtes.
-- **Ordre des positions terrain** : titulaires, banc et réservistes sont affichés dans
-  l'ordre de service — 1 Setter · 2 Front OH · 3 Front MB · 4 Opposite · 5 Back OH ·
-  6 Back MB · 7 Libéro (`getFiveOneOrder` / `getFiveOneSubSlots`, `lineupBuilder.ts`).
-- **MILP du 5-1** (`LineupBuilder`) : sélection conjointe titulaires (poids 1), banc
-  (λ = `settings.lineup.subObjectiveWeight`) et réservistes (λᵣ = `settings.lineup.reserveObjectiveWeight`, 0 < λᵣ < λ < 1),
-  domination à 2 étages titulaire ≥ remplaçant ≥ réserviste par rôle, slots à `max: 1`
-  (un rôle sans éligible laisse le slot vide au lieu de rendre le modèle infaisable).
-  **Ordre avant/arrière** en post-traitement : Front OH ≥ Back OH (meilleur attaquant
-  devant), Back MB ≥ Front MB (meilleur bloqueur sur la ligne du passeur). L'ancien swap
-  « placement du libéro » (`receptionOptimizer`) qui pouvait inverser ces paires pour la
-  réception a été **abandonné** (demande utilisateur).
-- **Disponibilité pour la lineup** (`availabilityAnalyzer`, demande utilisateur) : sont
-  **exclus** des classements, du 5-1, des points faibles et du recrutement :
-  - les joueurs `Position = Academy` (toute variante « Acad… », ex. FR « Académie ») ;
-  - les joueurs dont la colonne `Progress` (FR « Progression ») ≠ `Improving` :
-    `Considering retirement` (FR « Envisage la retraite ») **sans exception** (ne progresse
-    plus : le faire jouer est du gâchis, on laisse jouer les jeunes) ; `Starting to decline`
-    (FR « Début de déclin ») **sauf s'il est exceptionnel** = sa présence augmente la somme
-    des scores des 7 titulaires du 5-1 (MILP, effets de cascade compris) d'au moins
-    `settings.availability.declineExceptionalMinGain` vs la meilleure lineup sans lui (valeur =
-    somme des scores + valeur de la synergie des signes) (chaque déclinant
-    évalué seul face à la base « Improving »).
-  Valeurs FR vérifiées sur un export réel : « En progression », « Début de déclin ».
-  Colonne `Progress` absente/vide (anciens CSV) ⇒ `Improving` ; valeur inconnue ⇒ traitée
-  comme déclin + avertissement.
-- **Academy** (`academyAnalyzer`) : éligible ⇔ âge ≤ `settings.academy.maxAge`. On reconstruit
-  le 5-1 sur le pool disponible + les joueurs Academy éligibles ; un jeune **titulaire ou
-  remplaçant** (banc — un réserviste ne compte pas) de cette lineup hypothétique doit
-  **sortir** de l'Academy (slot visé + occupant actuel affichés) ; un joueur Academy au-delà de cet âge
-  sort dans tous les cas ; un joueur actif éligible (âge) hors titulaires/banc doit **entrer** à
-  l'Academy. La lineup de la section 5-1 reste celle de l'état actuel (Academy exclue).
-- **Libérations prioritaires** (`rosterBalanceAnalyzer`, param `forced`) : les
-  `Considering retirement` et les `Starting to decline` non exceptionnels sont listés **en
-  tête** des joueurs à vendre (motif affiché), hors MILP, même si le roster ne dépasse pas la cible ; le MILP à
-  quotas ne départage ensuite que les autres (pénuries de rôle signalées seulement s'il y a
-  des ventes « quota »).
-- **Chimie des signes** : sous-bloc « Chimie des signes » de la section 5-1 (non numéroté,
-  verdict « unités/9 · ≈ +x % de victoire » dans le titre) : signe (FR ; effet libéro entre
-  parenthèses), chimie par phase, effet actif, connexion passeur. Absent si le CSV n'a pas
-  de colonne `Sign`/`Signe`. Un remplaçant au Δ **positif** = joueur au meilleur score
-  individuel laissé sur le banc pour la chimie.
-- **Réservistes (mécanique de blessures du jeu)** : 3ᵉ étage après le banc — un
-  réserviste par slot, le joueur qui monte au banc quand le titulaire est blessé (son
-  remplaçant entrant alors dans le six de base). Un slot remplaçant vide ⇒ slot
-  réserviste vide.
-- **Gestion du roster à quotas souples** (`rosterBalanceAnalyzer`) : la sélection des
-  `settings.roster.target` joueurs à garder est un MILP à contraintes `max` (au plus N joueurs par rôle :
-  `settings.roster.targetCounts` ; chaque joueur sur au
-  plus 1 rôle) qui maximise d'abord le **nombre de gardés** (`KEEP_BONUS`) puis la somme
-  des scores. Si un rôle manque d'éligibles, le modèle reste **faisable** : les slots
-  vacants sont réattribués aux meilleurs joueurs restants tous rôles confondus
-  (« flex »), la pénurie est affichée par rôle, et la **liste des joueurs à vendre est
-  toujours produite**.
-- **Rotation du 2ᵉ libéro (substitution réception / service)** (`liberoRotationAnalyzer.ts`) :
-  le jeu permet de faire entrer/sortir le 2ᵉ libéro selon la **phase** (réception = on
-  reçoit le service ; service = on sert puis on défend/digge). On compare nos 2 libéros
-  retenus (titulaire du 5-1 + son remplaçant « Remp. Libéro ») sur **deux sous-profils
-  séparés** dérivés de la config libéro (`deriveLiberoReception` / `deriveLiberoDefense`,
-  `roleConfig.ts`) : un profil **RÉCEPTION** (sous-stats `LIBERO_RECEPTION_SUBSTATS` =
-  `reception` + communes) et un profil **DÉFENSE** (`LIBERO_DEFENSE_SUBSTATS` = `defense`
-  + communes). Côté stats **seules `reception` et `defense` discriminent** ; toutes les
-  autres sous-stats (overhand, bump, awareness, focus, stamina, reflex, setting) sont
-  **communes** aux deux phases. Les **traits sont différenciés** :
-  `LIBERO_RECEPTION_ONLY_TRAITS` = Guardian (masqué du profil défense — « meilleures stats
-  de réception ») ; `LIBERO_DEFENSE_ONLY_TRAITS` = Defensive Specialist (« pas la réception
-  service ») + Last Resort (dig de sauvetage, masqués du profil réception). Les traits
-  partagés (Master Mind 1ʳᵉ/2ᵉ touche, Quick Learner, Overachiever, Vigorous, traits
-  d'équipe) comptent dans les deux. On en déduit le **meilleur receveur** et le **meilleur
-  défenseur** ; verdict selon `settings.libero.subMinDelta` (échelle 0-99) : `system`
-  (spécialisation nette dans les 2 phases → rotation réception/service conseillée),
-  `situational` (nette dans 1 seule phase), `none` (un libéro domine les 2 phases, ou
-  écarts négligeables → garder le meilleur global), `single` (un seul libéro retenu).
-  Sous-bloc rattaché à la section 5-1 (non numéroté).
-- **Recrutement — 3 signes** (`selectSigns`) : pour chaque signe, sur chacun des 3 rôles
-  ciblés, on remplace le titulaire le plus faible du rôle par une recrue de même score
-  portant ce signe ; apport = bonus de signe du rôle (normalisé 0-99) + variation des unités
-  de chimie des titulaires × valeur d'une unité (même calibrage que le 5-1). Top 3.
-- **Recrutement (règle utilisateur)** : les 3 rôles prioritaires cumulent le moins bon
-  score normalisé du titulaire le plus faible et le plus gros gap de banc
-  (`urgence = shortage×1e6 + (100 − score) + benchDelta`, le manque d'effectifs prime).
-  Les 3 traits recommandés sont choisis **conjointement par MILP** (`selectTraitTrio`) :
-  le trio qui maximise l'apport cumulé (somme des `traitBonuses`, atténuée si déjà
-  couverts ≥ 2× dans la lineup) aux 3 rôles ciblés, avec pénalité de recouvrement pour
-  les paires redondantes (`REDUNDANT_TRAIT_GROUPS`, ex. Meteor/Float Serve) — pas un
-  simple top 3 trait par trait.
-- **Score courant = performance du jour, sans rareté ni progression** (stats + traits +
-  signe) : `RARITY_COEFF`
-  puis le terme `alpha·(cap − statScore)` ont été **supprimés à la demande de
-  l'utilisateur**. `scorePlayer` = stats + traits normalisés, point — la rareté n'affecte
-  pas le score (rankings, MILP 5-1, rotation libéro, recrutement, gestion du roster : tous
-  comparables).
-- **Alias FR des 9 nouveaux traits** (`playerParser.ts`) : traductions à confirmer en
-  jeu ; tout trait non reconnu après traduction déclenche un avertissement « trait
-  inconnu » (sinon son bonus serait perdu silencieusement).
+- **Report sections** (numbered dynamically, numbering follows what is actually shown):
+  1. Role rankings · 2. Recommended 5-1 lineup · 3. Academy & progression · 4. Team weak spots
+  + recruitment filter · 5. Roster management — players to sell (if roster >
+  `settings.roster.target` **or** there are non-improving players to release).
+- **Console + markdown output**: `--md <file>` also writes the report as GitHub markdown
+  (`MarkdownReporter`, same content as the console through the common `Reporter` interface).
+  The web app renders this same markdown as HTML; in CI it can be published in the **job
+  summary** (`$GITHUB_STEP_SUMMARY`), readable on mobile.
+- **Collapsible markdown**: every numbered section is a `<details open>` with its `<h2>` in the
+  `<summary>`; every sub-block (detailed tables, libero rotation, recruitment…) is a `<details>`
+  collapsed by default with its **verdict summarised in the title**.
+- **Lineup SUMMARY table (in-game entry)**: always visible at the top of the 5-1 section — one
+  row per position (court order), columns Starter / Substitute (with Δ) / Injury reserve. The
+  detailed tables (rarity, scores) follow (collapsed in markdown).
+- **No methodology text in the report**: THIS file documents the rules. The report only holds
+  data, verdicts and short symbol legends.
+- **Court order**: starters, bench and reserves are listed in serving order — 1 Setter ·
+  2 Front OH · 3 Front MB · 4 Opposite · 5 Back OH · 6 Back MB · 7 Libero (`getFiveOneOrder` /
+  `getFiveOneSubSlots`, `lineupBuilder.ts`).
+- **5-1 MILP** (`LineupBuilder`): joint selection of starters (weight 1), bench
+  (λ = `settings.lineup.subObjectiveWeight`) and reserves (λᵣ =
+  `settings.lineup.reserveObjectiveWeight`), two-level dominance starter ≥ substitute ≥ reserve
+  per role, slots at `max: 1` (a role without eligible players leaves the slot empty instead of
+  making the model infeasible). **Front/back order** as post-processing: Front OH ≥ Back OH
+  (best attacker in front), Back MB ≥ Front MB (best blocker on the setter's line).
+- **Lineup availability** (`availabilityAnalyzer`): **excluded** from rankings, 5-1, weak spots
+  and recruitment:
+  - players with `Position = Academy` (any "Acad…" variant, e.g. French "Académie");
+  - players whose `Progress` column (French "Progression") ≠ `Improving`:
+    `Considering retirement` (French "Envisage la retraite") **without exception** (no longer
+    improving: playing time goes to the improving players); `Starting to decline` (French
+    "Début de déclin") **unless exceptional** = their presence raises the total of the 7
+    starters of the 5-1 (MILP, cascading effects included) by at least
+    `settings.availability.declineExceptionalMinGain` vs the best lineup without them (value =
+    sum of scores + value of the sign chemistry), each decliner evaluated alone against the
+    "Improving" base.
+  French values checked on a real export: "En progression", "Début de déclin". Missing/empty
+  `Progress` column (old CSVs) ⇒ `Improving`; unknown value ⇒ treated as declining + warning.
+- **Academy** (`academyAnalyzer`): eligible ⇔ age ≤ `settings.academy.maxAge`. The 5-1 is
+  rebuilt on the available pool + eligible academy players; a youngster who is a **starter or
+  substitute** (bench — a reserve does not count) of this hypothetical lineup should **leave**
+  the academy (target slot + current holder shown); an academy player above the age limit
+  leaves in any case; an eligible active player outside starters/bench should **join** the
+  academy. The lineup of the 5-1 section stays the current one (academy excluded).
+- **Priority releases** (`rosterBalanceAnalyzer`, `forced` param): `Considering retirement`
+  players and non-exceptional `Starting to decline` players are listed **first** among the
+  players to sell (reason shown), outside the MILP, even if the roster does not exceed the
+  target; the quota MILP only decides among the others (role shortages are reported only if
+  there are "quota" sales).
+- **Sign chemistry**: "Sign chemistry" sub-block of the 5-1 section (unnumbered, verdict
+  "units/9 · ≈ +x % win chance" in the title): sign (libero effect in brackets), chemistry per
+  phase, active effect, setter connection. Absent if the CSV has no `Sign`/`Signe` column. A
+  substitute with a **positive** Δ = a player with a better individual score left on the bench
+  for chemistry.
+- **Injury reserves** (game injury mechanic): 3rd level after the bench — one reserve per slot,
+  the player who moves up to the bench when the starter is injured (their substitute then
+  entering the starting six). Empty substitute slot ⇒ empty reserve slot.
+- **Roster management with soft quotas** (`rosterBalanceAnalyzer`): choosing the
+  `settings.roster.target` players to keep is a MILP with `max` constraints (at most N players
+  per role: `settings.roster.targetCounts`; each player on at most 1 role) that maximises first
+  the **number of players kept** (`KEEP_BONUS`) then the sum of scores. If a role lacks eligible
+  players, the model stays **feasible**: vacant slots go to the best remaining players of any
+  role ("flex"), the shortage is shown per role, and the **list of players to sell is always
+  produced**.
+- **2nd libero rotation (reception / serve substitution)** (`liberoRotationAnalyzer.ts`): the
+  game lets the 2nd libero come in/out depending on the **phase** (reception = receiving the
+  serve; serve = serving then defending/digging). The two selected liberos (5-1 starter + their
+  "Sub Libero") are compared on **two separate sub-profiles** derived from the libero config
+  (`deriveLiberoReception` / `deriveLiberoDefense`, `roleConfig.ts`): a **RECEPTION** profile
+  (sub-stats `LIBERO_RECEPTION_SUBSTATS` = `reception` + common) and a **DEFENSE** profile
+  (`LIBERO_DEFENSE_SUBSTATS` = `defense` + common). On stats **only `reception` and `defense`
+  discriminate**; all other sub-stats (overhand, bump, awareness, focus, stamina, reflex,
+  setting) are **common** to both phases. **Traits are split**: `LIBERO_RECEPTION_ONLY_TRAITS`
+  = Guardian (hidden from the defense profile — "better reception stats");
+  `LIBERO_DEFENSE_ONLY_TRAITS` = Defensive Specialist ("not serve receive") + Last Resort
+  (rescue dig), hidden from the reception profile. Shared traits (Master Mind 1st/2nd touch,
+  Quick Learner, Overachiever, Vigorous, team traits) count in both. This gives the **best
+  receiver** and the **best defender**; verdict based on `settings.libero.subMinDelta` (0-99
+  scale): `system` (clear specialisation in both phases → reception/serve rotation advised),
+  `situational` (clear in only 1 phase), `none` (one libero dominates both phases, or negligible
+  gaps → keep the best overall), `single` (only one libero selected). Sub-block of the 5-1
+  section (unnumbered).
+- **Recruitment — 3 signs** (`selectSigns`): for each sign, on each of the 3 targeted roles, the
+  weakest starter of the role is replaced by a recruit with the same score carrying that sign;
+  contribution = sign bonus of the role (normalised 0-99) + change in starters' chemistry units
+  × value of one unit (same calibration as the 5-1). Top 3.
+- **Recruitment — roles**: the 3 priority roles combine the lowest normalised score of the
+  weakest starter and the largest bench gap (`urgency = shortage×1e6 + (100 − score) +
+  benchDelta`, a lack of players comes first). The 3 recommended traits are chosen **jointly
+  by a MILP** (`selectTraitTrio`): the trio that maximises the total contribution (sum of
+  `traitBonuses`, reduced if already carried ≥ 2× in the lineup) to the 3 targeted roles, with an
+  overlap penalty for redundant pairs (`REDUNDANT_TRAIT_GROUPS`, e.g. Meteor/Float Serve) — not
+  a simple per-trait top 3.
+- **Current score = today's performance, no rarity or progression term** (stats + traits +
+  sign): rarity does not affect the score (rankings, 5-1 MILP, libero rotation, recruitment,
+  roster management: all comparable).
+- **French aliases of the newer traits** (`playerParser.ts`): to be confirmed in game; any trait
+  not recognised after translation triggers an "unknown trait" warning (otherwise its bonus would
+  be silently lost).
 
-## Signes & chimie (mécanique officielle, source jeu)
+## Signs & chemistry (official game mechanics)
 
-- **Chimie d'un joueur** = Σ sur chaque coéquipier sur le terrain de son côté (zone libéro
-  comprise) de +1 (il aime le signe), −1 (n'aime pas), 0. Matrice **non symétrique**
-  `signs.ts` (lignes = joueur, colonnes = coéquipier, Aries → Pisces). Effets à partir du
-  niveau de compte 20. Remplacements = la chimie change en cours de match.
-- **Effet du signe** actif si chimie ≥ 3 (`SIGN_ACTIVATION_THRESHOLD`). **Passeur** : aucun
-  effet de signe ; connexion renforcée avec l'attaquant si chimie(passeur) + chimie(attaquant)
-  ≥ 3 (`SETTER_SYNERGY_THRESHOLD`). **Libéro** : effet propre selon le groupe de son signe
-  (Taurus/Leo/Scorpio/Aquarius = récupération d'énergie sur réception/dig parfait ;
-  Gemini/Virgo/Sagittarius/Pisces = réflexes ; Aries/Cancer/Libra/Capricorn = prend toutes
-  les balles disputées).
-- **Synergie parfaite = +10 % de chance de victoire** (`SIGN_SYNERGY_MAX_WIN_GAIN`).
+- **A player's chemistry** = Σ over each teammate on court on their side (libero zone included)
+  of +1 (likes the sign), −1 (dislikes), 0. **Non-symmetric** matrix in `signs.ts` (rows =
+  player, columns = teammate, Aries → Pisces). Effects from account level 20. Substitutions =
+  chemistry changes during the match.
+- **Sign effect** active if chemistry ≥ 3 (`SIGN_ACTIVATION_THRESHOLD`). **Setter**: no sign
+  effect; stronger connection with the attacker if chemistry(setter) + chemistry(attacker) ≥ 3
+  (`SETTER_SYNERGY_THRESHOLD`). **Libero**: own effect depending on the group of their sign
+  (Taurus/Leo/Scorpio/Aquarius = energy recovery on a perfect reception/dig;
+  Gemini/Virgo/Sagittarius/Pisces = reflexes; Aries/Cancer/Libra/Capricorn = takes every
+  contested ball).
+- **Perfect chemistry = +10 % win chance** (`SIGN_SYNERGY_MAX_WIN_GAIN`).
 
-| Signe | Effet (joueur hors passeur/libéro) |
+| Sign | Effect (player other than setter/libero) |
 |---|---|
-| Aries | sur un kill, retire les buffs non permanents adverses |
-| Taurus | se fait moins avoir par les feintes au contre |
-| Gemini | ses feintes attirent plus les contreurs |
-| Cancer | rattrape toujours tip/dump/down ball à sa portée |
-| Leo | contre plus de tips, transforme des touches en stuffs |
-| Virgo | toutes stats ↑ aux balles de set/match et tie-break |
-| Libra | face au contre, tipe plus, tips plus durs à contrer/digger |
-| Scorpio | réduit l'efficacité des contreurs engagés sur lui |
-| Sagittarius | moins de fautes de service |
-| Capricorn | place mieux services et attaques |
-| Aquarius | 3 attaques connectées d'affilée ⇒ la suivante passe et frappe plus fort |
-| Pisces | ses traits se déclenchent plus souvent |
+| Aries | on a kill, removes the opponents' non-permanent buffs |
+| Taurus | fooled less by tips at the block |
+| Gemini | their fakes draw more blockers |
+| Cancer | always picks up tips / dumps / down balls in reach |
+| Leo | blocks more tips, turns touches into stuffs |
+| Virgo | all stats ↑ on set / match points and tie-break |
+| Libra | facing the block, tips more; tips harder to block/dig |
+| Scorpio | reduces the efficiency of blockers committed on them |
+| Sagittarius | fewer serve faults |
+| Capricorn | better placed serves and attacks |
+| Aquarius | 3 connected attacks in a row ⇒ the next one gets through and hits harder |
+| Pisces | their traits trigger more often |
 
+### Modelling
+- **Score** (`scorePlayer`): `signBonuses[role][sign]` is added raw (like a trait);
+  `idealScore` includes the best sign bonus of the role. Keep the weight **light**: it is the
+  value of the effect *assumed active*; activation depends on teammates and is handled by the
+  lineup builder.
+- **5-1 court in 2 phases** (½ each, `signChemistry.ts`): the libero replaces the back MB, the 2
+  MBs are never on court together → phase A = Setter, 2 OH, OP, Front MB, Libero; phase B = same
+  with Back MB. **Units** per phase (max 9): 5 activations (non-setters) + 4 setter ↔ attacker
+  connections (OH, OP, MB).
+- **Lineup builder — EXACT solving** (reliable rather than fast). Objective F = Σ starters'
+  scores + V·units(starters) + λ·(score + entry chemistry) of substitutes + λᵣ·score of reserves,
+  with V = 10 % × Σ starters' scores of the base MILP / 9 (perfect chemistry = +10 % of the
+  starters' value). Chemistry being quadratic, linearising it in the joint MILP does not finish
+  (> 2 min without a solution); a local search was tried then **dropped** (no optimality
+  guarantee, shown sub-optimal on a real roster). Retained method (`optimizeSignSynergy`):
+  1. base MILP without chemistry + local search ⇒ starting solutions;
+  2. **branch & bound** on the 7 starters with valid upper bounds: optimal assignment
+     (Hungarian algorithm, `assignment.ts`) of remaining starters + bench (max entry bonus) +
+     reserves without dominance, and a chemistry bound (best sign still available per
+     relation; exact enumeration when ≤ 2 free slots); symmetry of the 2 OH / 2 MB broken;
+  3. at each leaf, **exact** bench + reserves: Hungarian assignment, then joint MILP if the
+     substitute ≥ reserve dominance is violated.
+  Checked against an exhaustive enumeration (starters × bench MILP) on sub-rosters. Time:
+  ~10-80 s per lineup, ~1-3 min per report on large rosters; results cached per pool (the
+  decliners' base = main lineup). Time limit `settings.lineup.synergyTimeLimitSec`: beyond it,
+  best lineup found + "optimality not proven" warning. The **starter ≥ substitute dominance is
+  lifted** when there are signs (a substitute's Δ > 0 flags a player left out for chemistry).
+  The substitute/reserve follows their starter in front/back swaps.
+  `settings.lineup.signSynergy = false` disables everything.
 
-### Modélisation
-- **Score** (`scorePlayer`) : `signBonuses[rôle][signe]` s'ajoute brut (comme un trait) ;
-  `idealScore` inclut le meilleur bonus de signe du rôle. Poids à garder **léger** : c'est la valeur de l'effet *supposé actif* ; l'activation dépend des
-  coéquipiers et relève du lineup builder.
-- **Terrain 5-1 en 2 phases** (½ chacune, `signChemistry.ts`) : le libéro remplace le MB
-  arrière, les 2 MB ne sont jamais ensemble → phase A = Setter, 2 OH, OP, Front MB, Libéro ;
-  phase B = idem avec Back MB. **Unités** par phase (max 9) : 5 activations (non-passeurs)
-  + 4 connexions passeur ↔ attaquant (OH, OP, MB).
-- **Lineup builder — résolution EXACTE** (demande utilisateur : fiable plutôt que rapide).
-  Objectif F = Σ scores titulaires + V·unités(titulaires) + λ·(score + synergie d'entrée) des
-  remplaçants + λᵣ·score des réservistes, avec V = 10 % × Σ scores des titulaires du MILP de
-  base / 9 (synergie parfaite = +10 % de la valeur des titulaires). La chimie étant
-  quadratique, la linéariser dans le MILP joint ne termine pas (> 2 min sans solution) ; une
-  recherche locale a été essayée puis **abandonnée** (optimum non garanti, prouvé sous-optimal
-  sur un roster réel). Méthode retenue (`optimizeSignSynergy`) :
-  1. MILP de base sans synergie + recherche locale ⇒ solutions de départ ;
-  2. **branch & bound** sur les 7 titulaires avec bornes supérieures valides : affectation
-     optimale (algorithme hongrois, `assignment.ts`) titulaires restants + banc (bonus d'entrée
-     max) + réserve sans domination, et borne de chimie (meilleur signe encore disponible par
-     relation ; énumération exacte quand ≤ 2 slots libres) ; symétrie des 2 OH / 2 MB cassée ;
-  3. à chaque feuille, banc + réserve **exacts** : affectation hongroise, puis MILP joint si
-     la domination remplaçant ≥ réserviste n'est pas respectée.
-  Vérifié contre une énumération exhaustive (titulaires × MILP du banc) sur des sous-rosters.
-  Temps : ~10-80 s par lineup, ~1-3 min par rapport ; résultats mis en cache par pool
-  (la base des déclinants = lineup principale). Garde-fou `settings.lineup.synergyTimeLimitSec` :
-  au-delà, meilleure lineup trouvée + avertissement « optimalité non prouvée ».
-  La **domination titulaire ≥ remplaçant est levée** quand il y a des signes (le Δ > 0 d'un
-  remplaçant signale un joueur écarté pour la chimie). Le remplaçant/réserviste suit son
-  titulaire lors des swaps avant/arrière. `settings.lineup.signSynergy = false` désactive tout.
+## Trait effects (official game mechanics)
 
-## Effets des traits (mécaniques officielles, source jeu)
+Reference to calibrate the `traitBonuses` of params.json. The "Mechanic" column describes the
+**actual trigger** (not marketing flavour); it decides which roles benefit.
 
-Référence pour calibrer les `traitBonuses` du params.json. La colonne « Mécanique »
-décrit le **déclenchement réel** (et non une saveur marketing) ; c'est elle qui fixe les rôles
-qui en profitent.
+| Trait | Exact mechanic | Mostly benefits |
+|-------|----------------|-----------------|
+| **Master Mind** | Chance to trigger on the team's **1st or 2nd touch** if an involved player has the trait. Gives a bonus to **every following action until the ball crosses the net**. Only one Master Mind bonus active at a time. | **Setter** (systematic 2nd touch) **and libero/receiver** (very frequent 1st touch) |
+| **Moving Wall** | Front row: if the opponent **directly in front** attacks, **always** joins the block + chance to react to attacks that would get through; block bonus when triggered. Otherwise a decreasing chance (lower when the block is already crowded). | Middle Blocker, Opposite (right-side block), front-row Setter |
+| **Surprise Attack** | **As setter**: plays the **setter dump** more often, harder to read. **As attacker**: spike harder to block. When triggered, **faces at most 1 blocker**. | **Setter** (dump), Middle Blocker (quick), Opposite, Outside Hitter |
+| **Marksman** | Triggers on **attacks AND serves**. Small bonus to the action + lets the player **aim at the weakest defender**. | Outside Hitter, Opposite (hitters); a plus for any server |
+| **Meteor Serve** | When triggered, the serve becomes a **jump serve**: action bonus, **+ace chance**, **−fault chance**. | Opposite, Outside Hitter (power servers). **Not the libero.** |
+| **Vigorous** | Chance, **on every action**, to perform it **without spending energy**. | High-volume players over 6 rotations: Setter, OH, Libero |
+| **Guardian** | If the carrier has **better reception stats** than the player about to receive, chance to **take the action instead** (best receiver first, only one takes the ball). | Libero (top), Outside Hitter (good receiver); **counter-productive for the setter** (pulls them out of their hidden receive position) |
+| **Float Serve** | When triggered, float serve: bonus making it **harder to receive** + involves **other stats** of the receiver. | Any server (Setter, OH, OP). **Not the libero.** Redundant with Meteor (see `REDUNDANT_TRAIT_GROUPS`). |
+| **Defensive Specialist** | Chance, when **defending a powerful spike OR blocking**, to get a bonus (equal strength) or a better success rate (stronger opponent). **Does NOT apply to serve receive.** | Libero (dig), Outside Hitter (dig) **AND Middle Blocker / Opposite (block)** |
+| **Quick Learner** | After **3 good receptions / digs / sets in a row**, the next touch (reception/dig/set) **cannot fail** and becomes a **critical action**. A failed/weak touch resets the counter. | **Libero** (max reception+dig volume → builds the streak) **and Setter** (sets almost every rally); OH (reception+dig). Not MB/OP (few defensive touches, no sets) |
+| **Momentum Addict** | **Starts with an attack malus.** Every **clean** attack raises power (a kill even more), up to a cap. An **attack fault** resets to the starting malus. | **Reliable** high attack volume: Outside Hitter, Opposite; MB (quick). **Negative/zero** for the setter (too few attacks → stays at the malus) and **useless for the libero** (never attacks). |
+| **Loudmouth** | Chance, when the player **scores in the front row with a spike or a block**, to **undermine the opponent in front**: all their actions weakened for **3 rallies** (does not stack, reapplying restarts the timer). | Front-row attackers/blockers: Opposite, Middle Blocker, Outside Hitter. **Not the libero** (never in front). |
+| **True Leader** | Chance, when **a teammate on court fails an action (except block)**, to **steady them**: their next action cannot fail and their debuffs are cleared. | ~uniform **team** trait (depends on being on court): all starters. |
+| **Overachiever** | Chance, when **blocking / receiving / digging a stronger attack or serve**, to **raise their own action to the level of the one received**. Only for **Mythic rarity and below**. | Defenders under fire: **Libero** (reception+dig), Outside Hitter, Middle Blocker & Opposite (block). A plus for the setter (block). |
+| **Crafty** | Chance, on **their serves and attacks**, to make the opponent who handles them **spend extra energy**. When it triggers, **Vigorous cannot trigger**. | High-volume servers/attackers: OH, OP, MB, Setter (serves every rotation). **Zero for the libero** (neither serves nor attacks). Partial anti-synergy with Vigorous not modelled (both stay additive: different scopes). |
+| **Tenacious** | If the team **lost ≥ 3 points in a row**, **every teammate** gets a bonus to all actions, **growing** with the number of points lost. Gone as soon as a point is won. | ~uniform anti-slump **team** trait (being on court): all starters. |
+| **Hunter** | Chance, **on serve**, to **target the opposing setter (or opposite)** and put them **out of system** (serve bonus): the target's attack is reduced for the rally, and **Guardian cannot take the reception** for them. **Overhand/float** serves reach the setter anywhere; a **jump serve** only targets the back row. | Servers: Opposite, Outside Hitter, **Setter** (serves every rotation; float/overhand reaches the setter anywhere → synergy). Less for MB. **Zero for the libero** (never serves). |
+| **Last Resort** | Chance, when a teammate's touch **was about to lose the rally**, for **the LIBERO** to dig it up and send it back as a **free ball** (rally saved). Only if the dig would be a legal touch and the libero did not make the previous contact. | **Libero only** (tied to the position). |
 
-| Trait | Mécanique exacte | Profite surtout à |
-|-------|------------------|-------------------|
-| **Master Mind** | Chance de se déclencher sur la **1ʳᵉ ou 2ᵉ touche** de l'équipe si un joueur impliqué a le trait. Donne un bonus à **toutes les actions suivantes jusqu'à ce que le ballon franchisse le filet**. Un seul bonus Master Mind actif à la fois. | **Setter** (2ᵉ touche systématique) **et Libéro/réceptionneur** (1ʳᵉ touche très fréquente) |
-| **Moving Wall** | En zone avant, si l'adversaire **directement en face** attaque, participe **toujours** au contre + chance de réagir aux attaques qui passeraient ; bonus au contre quand déclenché. Hors face-à-face : chance décroissante (et d'autant plus faible que le contre est déjà nombreux). | Middle Blocker, Opposite (bloc côté droit), Setter avant |
-| **Surprise Attack** | **En tant que passeur** : joue plus souvent la **2ᵉ main**, plus dure à anticiper. **En tant qu'attaquant** : smash plus dur à contrer. Quand déclenché, **ne fait face qu'à 1 contreur au plus**. | **Setter** (2ᵉ main), Middle Blocker (quick), Opposite, Outside Hitter |
-| **Marksman** | Se déclenche **sur les attaques ET les services**. Léger bonus à l'action + permet de **viser le défenseur le plus faible**. | Outside Hitter, Opposite (frappeurs) ; appoint pour tout serveur |
-| **Meteor Serve** | Quand déclenché, le service devient un **service sauté** : bonus à l'action, **+chance d'ace**, **−chance de faute**. | Opposite, Outside Hitter (serveurs de puissance). **Pas le libéro.** |
-| **Vigorous** | Chance, **à chaque action**, de la réaliser **sans dépenser d'énergie**. | Joueurs à fort volume d'actions sur 6 rotations : Setter, OH, Libéro |
-| **Guardian** | Si le porteur a de **meilleures stats de réception** que le joueur sur le point de recevoir, chance de **prendre l'action à sa place** (meilleur RCV prioritaire, un seul prend le ballon). | Libéro (top), Outside Hitter (bon receveur) ; **contre-productif setter** (le sortirait de sa planque RCV) |
-| **Float Serve** | Quand déclenché, service flottant : bonus le rendant **plus dur à recevoir** + fait intervenir **d'autres stats** chez le réceptionneur. | Tout serveur (Setter, OH, OP). **Pas le libéro.** Redondant avec Meteor (cf. `REDUNDANT_TRAIT_GROUPS`). |
-| **Defensive Specialist** | Chance, en **défendant un smash puissant OU en posant un contre**, d'avoir un bonus (à forces égales) ou une meilleure réussite (adversaire supérieur). **Ne s'applique PAS à la réception service.** | Libéro (dig), Outside Hitter (dig) **ET Middle Blocker / Opposite (contre)** |
-| **Quick Learner** | Après **3 bonnes réceptions / digs / passes d'affilée**, la touche suivante (récep/dig/passe) **ne peut pas rater** et sort en **action critique**. Une touche ratée/faible remet le compteur à 0. | **Libéro** (volume récep+dig max → construit la série) **et Setter** (passe quasi systématique) ; OH (récep+dig). Pas MB/OP (peu de touches défensives, pas de passe) |
-| **Momentum Addict** | **Démarre avec un malus d'attaque.** Chaque attaque **sans faute** monte la puissance (un kill encore plus), jusqu'à un cap. Une **faute d'attaque** remet au malus de départ. | Gros volume d'attaques **fiable** : Outside Hitter, Opposite ; MB (quick). **Négatif/nul** au Setter (peu d'attaques → reste au malus) et **inutile au libéro** (n'attaque jamais). |
-| **Loudmouth** | Chance, quand le joueur **marque en zone avant au smash ou au contre**, de **saper l'adversaire en face** : toutes ses actions affaiblies pendant **3 échanges** (ne cumule pas, réappliquer relance le timer). | Attaquants/contreurs avant : Opposite, Middle Blocker, Outside Hitter. **Pas le libéro** (jamais en avant). |
-| **True Leader** | Chance, quand **un coéquipier sur le terrain rate une action (hors contre)**, de le **stabiliser** : sa prochaine action ne peut pas rater et ses debuffs sont purgés. | Trait **d'équipe** ~uniforme (dépend de la présence sur le terrain) : tous les titulaires. |
-| **Overachiever** | Chance, en **contrant / réceptionnant / diggant une attaque ou un service plus fort**, de **hausser sa propre action jusqu'au niveau de celle subie**. Réservé aux **raretés Mythic et en dessous**. | Défenseurs face au feu : **Libéro** (récep+dig), Outside Hitter, Middle Blocker & Opposite (contre). Appoint Setter (contre). |
-| **Crafty** | Chance, sur **ses services et attaques**, de faire **dépenser de l'énergie en plus** à l'adversaire qui suit ses actions. Quand ça se déclenche, **Vigorous ne peut pas se déclencher**. | Serveurs/attaquants à volume : OH, OP, MB, Setter (sert chaque rotation). **Nul au libéro** (ne sert ni n'attaque). Anti-synergie partielle avec Vigorous non modélisée (les deux restent additifs : périmètres différents). |
-| **Tenacious** | Si l'équipe a **perdu ≥ 3 points d'affilée**, **tous les coéquipiers** reçoivent un bonus à toutes leurs actions, **croissant** avec le nb de points perdus. Disparaît dès un point gagné. | Trait **d'équipe** anti-passage-à-vide ~uniforme (présence sur le terrain) : tous les titulaires. |
-| **Hunter** | Chance, **au service**, de **cibler le setter (ou l'opposite) adverse** et de le mettre **hors système** (bonus au service) : attaque de la cible réduite pour l'échange, et **Guardian ne peut pas prendre la réception** à sa place. Service **overhand/float** atteint le setter partout ; **service sauté** ne cible que la rangée arrière. | Serveurs : Opposite, Outside Hitter, **Setter** (sert chaque rotation ; float/overhand atteint le setter partout → synergie). Pas MB moins. **Nul au libéro** (ne sert jamais). |
-| **Last Resort** | Chance, quand la touche d'un coéquipier **allait perdre l'échange**, pour **le LIBÉRO** de la digger et de la renvoyer en **free ball** (échange sauvé). Seulement si le dig serait une touche légale et que le libéro n'a pas fait le contact précédent. | **Libéro uniquement** (mécanique liée au poste). **0 partout ailleurs.** |
+## Score computation (`scorePlayer`)
+- **Base = the 18 lowercase sub-stats only.** The UPPERCASE keys (ATTACK, SETTING, RECEPTION,
+  SERVE, BLOCK, STAMINA) are a **deterministic aggregation** of their lowercase sub-stats
+  (checked by regression on 50 players, R² 0.98–1.00): weighting them in `statsWeights` on top of
+  the lowercase ones would be **double counting**. Do not put uppercase weights in params.json (a
+  guard ignores them + warns). Composites are still used by `weaknessAnalyzer` (weak stats shown),
+  not for the score.
+- **Cross-role normalisation**: the final score is rescaled to `~0-99` per role via
+  `score / idealScore(role) × 99`, so scores are **comparable across roles** (otherwise roles with
+  bigger trait bonuses had a higher ceiling). `idealScore` = `99 + sum of the role's 4 best
+  traits` (4 = max traits, Special rarity) + best sign bonus.
+- **No rarity or progression term in the score**: the score reflects today's performance.
+- **Power mean** (`settings.balanceExponent` = p): stat part = (Σ wᵢ·statᵢᵖ)^(1/p), normalised
+  weights. p = 1 ⇒ plain weighted average; p < 1 penalises low stats (favours balanced profiles).
+- **Exclusive stat pairs (pair-max)** (`EXCLUSIVE_STAT_PAIRS`, applied in `computeRawScores`):
+  in a real action only one of the two stats is used, so when both are weighted for the role,
+  **only the player's higher one keeps its weight** (the other is dropped before normalisation):
+  - `read block` / `commit block` (the block score takes the max) — on a tie read wins (main
+    blocking skill). Asymmetric weights (read > commit) make a reader score slightly better than
+    a committer at equal values.
+  - `quick` / `power` (**no tempo favoured per role**, an MB can attack high sets) — on a tie
+    power wins. So that no style is structurally favoured, give quick and power the same weight.
 
-## Calcul du score (`scorePlayer`)
-- **Base = 18 attributs minuscules uniquement.** Les clés MAJUSCULES (ATTACK, SETTING,
-  RECEPTION, SERVE, BLOCK, STAMINA) sont une **agrégation déterministe** de leurs sous-stats
-  minuscules (vérifié par régression sur 50 joueurs, R² 0.98–1.00) : les pondérer dans
-  `statsWeights` en plus des minuscules serait du **double comptage**. Ne pas remettre de
-  poids majuscules dans le params.json (un garde-fou les ignore + avertit). Les composites
-  restent utilisés par `weaknessAnalyzer` (stats faibles affichées), pas pour le score.
-- **Normalisation cross-rôle** : le score final est rescalé à `~0-99` par rôle via
-  `score / idealScore(rôle) × 99`, pour que les notes soient **comparables entre rôles**
-  (sans ça, les rôles avec plus de bonus de traits avaient un plafond plus haut).
-  `idealScore` = `99 + somme des 4 meilleurs traits du rôle` (4 = max de traits, rareté Special).
-- **Ni rareté ni terme de progression dans le score** (`applyRarityScore` et
-  `DEFAULT_ALPHA` supprimés) : le score reflète la performance du jour.
-- **Moyenne de puissance** (`settings.balanceExponent` = p) : part stats = (Σ wᵢ·statᵢᵖ)^(1/p),
-  poids normalisés. p = 1 ⇒ moyenne pondérée classique ; p < 1 pénalise les stats basses
-  (favorise les profils équilibrés).
-- **Paires de stats exclusives (pair-max)** (`EXCLUSIVE_STAT_PAIRS`, appliqué dans
-  `computeRawScores`) : dans une
-  action réelle une seule des deux stats joue, donc quand les deux sont pondérées par
-  le rôle, **seule celle de plus forte valeur chez le joueur garde son poids** (l'autre
-  est retirée avant normalisation) :
-  - `read block` / `commit block` (règle utilisateur : le score de bloc prend le max) —
-    à égalité read gagne (compétence principale). Des poids asymétriques
-    (read > commit) font scorer un lecteur un peu mieux qu'un committer à valeurs égales.
-  - `quick` / `power` (règle utilisateur : **aucun tempo privilégié par rôle**, un MB
-    peut attaquer en passe haute) — à égalité power gagne. Pour
-    qu'aucun style ne soit structurellement avantagé, donner le même poids à quick et power.
+## Composite formulas (reverse-engineered, validated on 117 players)
+The 6 UPPERCASE attributes are **global weighted averages** of the lowercase attributes. Refined
+version on **117 players** (reveals `max/min` terms on ATTACK and BLOCK):
 
-## Formules des composites (reverse-engineering, validé sur 117 joueurs)
-Les 6 attributs MAJUSCULES sont des **moyennes pondérées globales** des attributs minuscules.
-Version affinée sur **117 joueurs** (révèle des termes `max/min` sur ATTACK et BLOCK) :
-
-| Composite | Formule |
+| Composite | Formula |
 |-----------|---------|
 | STAMINA   | `stamina` |
 | SERVE     | `0.85·serve + 0.075·awareness + 0.075·attack` |
@@ -307,86 +283,82 @@ Version affinée sur **117 joueurs** (révèle des termes `max/min` sur ATTACK e
 | ATTACK    | `0.55·spike + 0.20·max(power,quick) + 0.05·min(power,quick) + 0.10·back attack + 0.05·attack + 0.05·awareness` |
 | BLOCK     | `0.65·block + 0.20·max(read block,commit block) + 0.05·min(read block,commit block) + 0.04·defense + 0.04·focus + 0.02·reflex` |
 
-Les poids somment à ≈ 1 → vraies moyennes pondérées.
+Weights sum to ≈ 1 → true weighted averages.
 
-### ⚠️ Les composites ne servent qu'au SCORE D'AFFICHAGE — pas à modéliser le jeu
-Confirmé par le développeur : les 6 notes MAJUSCULES sont une **synthèse affichée** pour donner
-une idée aux joueurs qui ne veulent pas creuser. **Le jeu réel fonctionne par SEUILS de
-sous-stats qui débloquent des actions** (ex. un overhand suffisant débloque tel tempo de passe).
-Conséquence directe sur les `statsWeights` :
-- **Ne PAS répartir les poids selon les coefficients des formules ci-dessus.** Une sous-stat à
-  faible coefficient d'affichage (ex. `overhand` = 10 % de SETTING) peut être **fonctionnellement
-  critique** parce qu'elle garde la porte d'une action clé.
-- On calibre **par fonction réelle du poste** : pour chaque sous-stat, qu'est-ce qu'elle
-  débloque/porte dans le job du rôle ? On charge fort les stats qui *gardent la porte* des actions
-  importantes. Le scorer étant une moyenne pondérée (pas de vrai seuil dur), on **approxime un
-  seuil par un poids élevé** sur la stat déclencheuse.
-- Les formules composites restent utiles au **score d'affichage** seulement.
+### ⚠️ Composites are only a DISPLAY score — not a model of the game
+Confirmed by the developer: the 6 UPPERCASE ratings are a **displayed summary** for players who
+do not want to dig deeper. **The actual game works with sub-stat THRESHOLDS that unlock
+actions** (e.g. enough overhand unlocks a given set tempo). Direct consequence for
+`statsWeights`:
+- **Do NOT spread weights following the coefficients above.** A sub-stat with a small display
+  coefficient (e.g. `overhand` = 10 % of SETTING) can be **functionally critical** because it
+  gates a key action.
+- Calibrate **by the actual function of the position**: for each sub-stat, what does it
+  unlock/carry in the role's job? Weight heavily the stats that *gate* the important actions.
+  The scorer being a weighted average (no hard threshold), a **threshold is approximated by a
+  high weight** on the triggering stat.
 
-### Constats validés
-- **Agrégation linéaire.** Les termes carrés ne sont jamais retenus utilement (gain LOO nul,
-  poids ≈ 0) → pas de non-linéarité. 3 composites sont parfaitement linéaires (R² > 0.9996).
-- **Formule globale, PAS par rôle.** La cross-validation montre que caler par rôle ne fait pas
-  mieux que global (souvent pire) ; le « gain par rôle » observé sur un petit échantillon était
-  du surapprentissage. **Conséquence : les joueurs multi-rôles suivent la même formule que tout
-  le monde** (ils sont même légèrement mieux prédits).
-- **`reflex` quasi absent des composites** : ~1,5 % dans RECEPTION, ~2 % dans BLOCK, nul ailleurs.
-  Ne pas en conclure qu'il est inutile : son **effet gameplay réel** (réaction défense/dig,
-  débloqué par seuil) n'est pas reflété dans la note d'affichage — il garde donc un poids
-  fonctionnel non négligeable dans les `statsWeights` des postes défensifs.
-- **Anomalies irréductibles** : quelques joueurs isolés ne suivent aucune formule (ex. un ATTACK de 63 alors que toutes les
-  sous-stats sont ≥ 74 — mathématiquement impossible pour une moyenne positive ; d'autres écarts
-  de ~8-9 points sur ATTACK ou BLOCK).
-  Aucune stat, terme carré ou rôle ne les explique → incohérences de données côté jeu. C'est ce
-  qui maintient la MAE d'ATTACK/BLOCK à ~1 au lieu de ~0.2.
+### Validated findings
+- **Linear aggregation.** Squared terms are never usefully retained (zero LOO gain, weight ≈ 0)
+  → no non-linearity. 3 composites are perfectly linear (R² > 0.9996).
+- **Global formula, NOT per role.** Cross-validation shows per-role fitting does no better than
+  global (often worse); the "per-role gain" seen on a small sample was overfitting. **So
+  multi-role players follow the same formula as everyone** (they are even slightly better
+  predicted).
+- **`reflex` nearly absent from composites**: ~1.5 % in RECEPTION, ~2 % in BLOCK, none elsewhere.
+  Do not conclude it is useless: its **real gameplay effect** (reaction in defense/dig, unlocked
+  by threshold) is not reflected in the display rating — it keeps a non-negligible functional
+  weight for defensive positions.
+- **Irreducible anomalies**: a few isolated players follow no formula (e.g. an ATTACK of 63 while
+  all sub-stats are ≥ 74 — mathematically impossible for a positive average; other gaps of
+  ~8-9 points on ATTACK or BLOCK). No stat, squared term or role explains them → data
+  inconsistencies in the game. This keeps the ATTACK/BLOCK MAE at ~1 instead of ~0.2.
 
-## Descriptions officielles des sous-stats (source jeu)
-Référence de calibrage des `statsWeights`. C'est cette table qui a motivé le pair-max
-read/commit block et quick/power.
+## Official sub-stat descriptions (game source)
+Reference to calibrate `statsWeights`. This table motivated the read/commit block and
+quick/power pair-max.
 
-| Sous-stat | Effet officiel |
+| Sub-stat | Official effect |
 |---|---|
-| setting | Qualité des passes + capacité à mener un jeu rapide (tempo Rapide) |
-| serve | Force du service ; haut niveau = débloque services sautés et plus d'aces |
-| spike | Puissance et précision des attaques normales |
-| quick | Attaque sur passes rapides et basses |
-| power | Attaque sur passes hautes et balles lentes |
-| awareness | Fréquence des attaques/services/passes **exceptionnels** + fréquence des dumps du passeur avant |
-| attack | **Force** de ces actions exceptionnelles (attaques, services, dumps) |
-| back attack | Contribue à la note d'attaque **en rangée arrière** |
-| reception | Qualité de réception des services et digs ; bas = ciblé par les serveurs adverses |
-| overhand | Passe à deux mains hautes : utilisée pour passer ET recevoir les services flottants |
-| bump | Manchette : contre les services durs et pour digger les smashes |
-| block | Force de contre au filet |
-| read block | Lecture de la passe pour former/timer le contre — **compétence principale de contre** |
-| commit block | Engagement sur un attaquant désigné — **ne s'applique que si le bloc dédié est configuré** |
-| focus | Chance de produire un dig ou un contre **exceptionnel** (le pendant défensif d'awareness) |
-| defense | Qualité des digs et sauvetages |
-| stamina | Endurance : fatigue, taux d'erreur, récupération sur le banc |
-| reflex | Réaction aux balles rapides : services durs, dumps du passeur, attaques surprises |
+| setting | Set quality + ability to run a fast offense (Quick tempo) |
+| serve | Serve power; high level = unlocks jump serves and more aces |
+| spike | Power and accuracy of normal attacks |
+| quick | Attack on fast, low sets |
+| power | Attack on high sets and slow balls |
+| awareness | Frequency of **exceptional** attacks/serves/sets + frequency of front-row setter dumps |
+| attack | **Strength** of those exceptional actions (attacks, serves, dumps) |
+| back attack | Contributes to the attack rating **from the back row** |
+| reception | Serve-receive and dig quality; low = targeted by opposing servers |
+| overhand | Two-handed overhead pass: used to set AND to receive float serves |
+| bump | Forearm pass: against hard serves and to dig spikes |
+| block | Blocking strength at the net |
+| read block | Reading the set to form/time the block — **main blocking skill** |
+| commit block | Committing on a designated attacker — **only applies if dedicated blocking is set up** |
+| focus | Chance of an **exceptional** dig or block (defensive counterpart of awareness) |
+| defense | Dig and save quality |
+| stamina | Endurance: fatigue, error rate, bench recovery |
+| reflex | Reaction to fast balls: hard serves, setter dumps, surprise attacks |
 
-## Méthode de calibrage des profils (par fonction)
-Les `statsWeights` de chaque rôle sont calibrés **par fonction réelle du poste** (cf. section
-composites), pas par les coefficients d'affichage. Pour chaque rôle on liste ses actions (attaque
-avant/arrière, réception, dig, bloc, service, passe de secours…), puis on charge les sous-stats
-qui gardent la porte de ces actions. Les `traitBonuses` suivent les **mécaniques exactes** des
-traits (1ʳᵉ/2ᵉ touche pour Master Mind, 2ᵉ main pour Surprise Attack côté setter, contre pour
-Defensive Specialist, etc.).
+## Profile calibration method (by function)
+Each role's `statsWeights` are calibrated **by the actual function of the position** (see the
+composites section), not by display coefficients. For each role, list its actions (front/back
+attack, reception, dig, block, serve, emergency set…), then weight the sub-stats that gate those
+actions. `traitBonuses` follow the **exact mechanics** of the traits (1st/2nd touch for Master
+Mind, setter dump for Surprise Attack on the setter, block for Defensive Specialist, etc.).
 
-
-## Format du params.json
+## params.json format
 ```jsonc
 {
-  "traitWeight": 1,            // multiplie tous les traitBonuses (appliqué au chargement)
-  "settings": { ... },         // cf. section Réglages (facultatif, défauts sinon)
+  "traitWeight": 1,            // multiplies every traitBonus (applied at load time)
+  "settings": { ... },         // see Settings (optional, defaults otherwise)
   "roles": {                   // setter, outsideHitter, middleBlocker, oppositeHitter, libero
     "setter": {
-      "statsWeights": { "setting": 10, ... },   // 18 sous-stats minuscules, échelle libre
-      "traitBonuses": { "Master Mind": 0, ... }, // points ajoutés au score de stats 0-99
-      "signBonuses":  { "Aries": 0, ... }        // valeur de l'effet du signe (supposé actif)
+      "statsWeights": { "setting": 10, ... },   // 18 lowercase sub-stats, any scale
+      "traitBonuses": { "Master Mind": 0, ... }, // points added to the 0-99 stat score
+      "signBonuses":  { "Aries": 0, ... }        // value of the sign effect (assumed active)
     }
   }
 }
 ```
-Un `traitBonus` s'ajoute **brut** au score de stats normalisé (~0-99) : un bonus de 10 ≈
-+10-14 % de score → significatif mais non écrasant.
+A `traitBonus` is added **raw** to the normalised stat score (~0-99): a bonus of 10 ≈ +10-14 %
+of score → significant but not overwhelming.

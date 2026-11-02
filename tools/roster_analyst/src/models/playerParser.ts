@@ -119,8 +119,8 @@ function parseProgress(raw: string | undefined): Progress {
     if (!warnedUnknownProgress.has(v)) {
         warnedUnknownProgress.add(v);
         console.warn(
-            `⚠️  Progression inconnue « ${v} » dans le CSV : traitée comme « Starting to decline » ` +
-            `(alias manquant dans playerParser.ts ?).`
+            `⚠️  Unknown progress value "${v}" in the CSV: treated as "Starting to decline" ` +
+            `(missing alias in playerParser.ts?).`
         );
     }
     return "Starting to decline";
@@ -139,7 +139,7 @@ function parseSign(raw: string | undefined): Sign | null {
     if (KNOWN_SIGNS.has(canon)) return canon as Sign;
     if (!warnedUnknownSigns.has(v)) {
         warnedUnknownSigns.add(v);
-        console.warn(`⚠️  Signe inconnu « ${v} » dans le CSV : ignoré (alias manquant dans signs.ts ?).`);
+        console.warn(`⚠️  Unknown sign "${v}" in the CSV: ignored (missing alias in signs.ts?).`);
     }
     return null;
 }
@@ -157,8 +157,8 @@ function warnIfUnknownTrait(trait: string): void {
     if (KNOWN_TRAITS.has(trait) || warnedUnknownTraits.has(trait)) return;
     warnedUnknownTraits.add(trait);
     console.warn(
-        `⚠️  Trait inconnu « ${trait} » dans le CSV : aucun bonus ne sera appliqué ` +
-        `(alias FR manquant dans playerParser.ts ?).`
+        `⚠️  Unknown trait "${trait}" in the CSV: no bonus will be applied ` +
+        `(missing French alias in playerParser.ts?).`
     );
 }
 
@@ -170,7 +170,7 @@ function warnIfUnknownTrait(trait: string): void {
 export function parseCSVText(text: string): Player[] {
     const raw = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
     const lines = raw.trim().split("\n").filter((l) => l.trim() !== "");
-    if (lines.length === 0) throw new Error("CSV vide.");
+    if (lines.length === 0) throw new Error("empty CSV.");
     const header = lines[0].split(",").map((h) => {
         const trimmed = h.trim();
         return HEADER_ALIASES[trimmed] ?? trimmed;
@@ -179,8 +179,8 @@ export function parseCSVText(text: string): Player[] {
     const missing = ["First name", "Last name", "Roles"].filter((c) => !header.includes(c));
     if (missing.length) {
         throw new Error(
-            `CSV : colonne(s) manquante(s) : ${missing.join(", ")} ` +
-            `(export roster du jeu attendu, en-têtes anglais ou français).`
+            `CSV: missing column(s): ${missing.join(", ")} ` +
+            `(expected the in-game roster export, English or French headers).`
         );
     }
 

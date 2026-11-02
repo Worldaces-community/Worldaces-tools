@@ -15,7 +15,6 @@ import { AcademyAnalysis, AcademyMove } from "../analysis/academyAnalyzer";
 import { SETTINGS } from "../config/settings";
 import { Reporter } from "./reporter";
 import { ChemistryAnalysis, fmtChem, fmtChemVerdict, fmtOn, fmtSign } from "../lineup/signChemistry";
-import { SIGN_LABELS_FR } from "../config/signs";
 import { formatPlayer, createBox, rarityName, padEndAnsi, paint, HR, HR2 } from "./formatters";
 import { ROLE_LABELS } from "../config/constants";
 
@@ -69,12 +68,12 @@ export class ConsoleReporter implements Reporter {
      * Display the header
      */
     header(rosterCount: number, paramsPath: string, availableCount?: number): void {
-        this.banner("🏐  WORLD ACES – ANALYSE DE ROSTER");
+        this.banner("🏐  WORLD ACES – ROSTER ANALYSIS");
         const avail = availableCount !== undefined && availableCount !== rosterCount
-            ? ` (${availableCount} disponibles pour la lineup)` : "";
-        console.log(`  Roster : ${rosterCount} joueurs${avail}   |   Params : ${paramsPath}`);
+            ? ` (${availableCount} available for the lineup)` : "";
+        console.log(`  Roster: ${rosterCount} players${avail}   |   Params: ${paramsPath}`);
         if (!this.verbose) {
-            console.log(paint.dim("  (--verbose pour afficher les formules de score par rôle)"));
+            console.log(paint.dim("  (--verbose shows the score formulas per role)"));
         }
     }
 
@@ -86,7 +85,7 @@ export class ConsoleReporter implements Reporter {
         roleLabels: Record<RoleName, string>,
         params: Params
     ): void {
-        this.section("CLASSEMENTS PAR RÔLE");
+        this.section("ROLE RANKINGS");
 
         for (const roleName of Object.keys(allRankings) as RoleName[]) {
             const config = params.roles[roleName];
@@ -99,17 +98,17 @@ export class ConsoleReporter implements Reporter {
 
             if (this.verbose) {
                 const fmtBonus = (v: number) => (v >= 0 ? `+${v}` : `${v}`);
-                console.log(paint.dim(`\n  Poids des stats : ${Object.entries(config.statsWeights)
+                console.log(paint.dim(`\n  Stat weights: ${Object.entries(config.statsWeights)
                     .filter(([, v]) => v !== 0)
                     .map(([k, v]) => `${k}×${v}`)
                     .join(" + ")}`));
-                console.log(paint.dim(`  Bonus de traits : ${Object.entries(config.traitBonuses)
+                console.log(paint.dim(`  Trait bonuses: ${Object.entries(config.traitBonuses)
                     .filter(([, v]) => v !== 0)
                     .map(([k, v]) => `${k}(${fmtBonus(Math.round(v * 10) / 10)})`)
                     .join(", ")}`));
                 const signs = Object.entries(config.signBonuses ?? {}).filter(([, v]) => v !== 0);
                 if (signs.length) {
-                    console.log(paint.dim(`  Bonus de signes : ${signs
+                    console.log(paint.dim(`  Sign bonuses: ${signs
                         .map(([k, v]) => `${k}(${fmtBonus(v)})`)
                         .join(", ")}`));
                 }
@@ -132,8 +131,8 @@ export class ConsoleReporter implements Reporter {
         // Récapitulatif saisie en jeu : une ligne par position, les 3 étages côte
         // à côte (titulaire / remplaçant avec Δ / remplaçant blessure).
         const recapLines: string[] = [
-            paint.bold("  RÉCAPITULATIF (saisie en jeu)"),
-            paint.bold(`     ${"Poste".padEnd(20)} ${"Titulaire".padEnd(24)} ${"Remplaçant".padEnd(30)} Rés. blessure`),
+            paint.bold("  SUMMARY (in-game entry)"),
+            paint.bold(`     ${"Position".padEnd(20)} ${"Starter".padEnd(24)} ${"Substitute".padEnd(30)} Injury reserve`),
         ];
         lineupOrder.forEach((slot, i) => {
             const starter = lineup[slot]?.player.fullName ?? paint.red("—");
@@ -154,17 +153,17 @@ export class ConsoleReporter implements Reporter {
             const pos = `${i + 1}.`;
             const s = lineup[slot];
             if (!s) {
-                starterLines.push(`  ${pos} ${slot.padEnd(20)} ${paint.red("── AUCUN JOUEUR ÉLIGIBLE")}`);
+                starterLines.push(`  ${pos} ${slot.padEnd(20)} ${paint.red("── NO ELIGIBLE PLAYER")}`);
                 return;
             }
             const p = s.player;
             starterLines.push(
                 `  ${pos} ${slot.padEnd(20)} ${p.fullName.padEnd(24)} ` +
                 `${padEndAnsi(rarityName(p.rarity as Rarity), 10)} ` +
-                `Score : ${scoreColor(s.score)(s.score.toFixed(0).padStart(3))}`
+                `Score: ${scoreColor(s.score)(s.score.toFixed(0).padStart(3))}`
             );
         });
-        console.log("\n" + createBox([paint.bold("  TITULAIRES"), ...starterLines], 80).join("\n"));
+        console.log("\n" + createBox([paint.bold("  STARTERS"), ...starterLines], 80).join("\n"));
 
         // Banc — même ordre de positions que les titulaires.
         const subLines: string[] = [];
@@ -175,38 +174,38 @@ export class ConsoleReporter implements Reporter {
                 subLines.push(
                     `  ${pos} ${sub.label.padEnd(17)} ${p.fullName.padEnd(24)} ` +
                     `${padEndAnsi(rarityName(p.rarity as Rarity), 10)} ` +
-                    `Score : ${scoreColor(sub.sub.score)(sub.sub.score.toFixed(0).padStart(3))}  ` +
-                    `→ remplace ${sub.replaces} (${formatDelta(sub.delta)})`
+                    `Score: ${scoreColor(sub.sub.score)(sub.sub.score.toFixed(0).padStart(3))}  ` +
+                    `→ replaces ${sub.replaces} (${formatDelta(sub.delta)})`
                 );
             } else {
                 subLines.push(
-                    `  ${pos} ${sub.label.padEnd(17)} ${paint.dim("── aucun joueur éligible")}` +
-                    " ".repeat(14) + `→ remplace ${sub.replaces}`
+                    `  ${pos} ${sub.label.padEnd(17)} ${paint.dim("── no eligible player")}` +
+                    " ".repeat(14) + `→ replaces ${sub.replaces}`
                 );
             }
         });
-        console.log("\n" + createBox([paint.bold("  BANC"), ...subLines], 80).join("\n"));
+        console.log("\n" + createBox([paint.bold("  BENCH"), ...subLines], 80).join("\n"));
 
         // Réservistes (blessures) : montent au banc quand le titulaire du slot
         // est blessé (son remplaçant entre alors dans le six de base).
         const reserveLines: string[] = [
-            paint.bold("  RÉSERVISTES (BLESSURES)"),
+            paint.bold("  INJURY RESERVES"),
         ];
         substitutes.forEach((sub, i) => {
             const pos = `${i + 1}.`;
-            const resLabel = sub.label.replace(/^Remp\./, "Rés.");
+            const resLabel = sub.label.replace(/^Sub /, "Res. ");
             if (sub.reserve) {
                 const p = sub.reserve.player;
                 reserveLines.push(
                     `  ${pos} ${resLabel.padEnd(17)} ${p.fullName.padEnd(24)} ` +
                     `${padEndAnsi(rarityName(p.rarity as Rarity), 10)} ` +
-                    `Score : ${scoreColor(sub.reserve.score)(sub.reserve.score.toFixed(0).padStart(3))}  ` +
-                    `→ banc si ${sub.replaces} blessé (${formatDelta(sub.reserveDelta)})`
+                    `Score: ${scoreColor(sub.reserve.score)(sub.reserve.score.toFixed(0).padStart(3))}  ` +
+                    `→ bench if ${sub.replaces} injured (${formatDelta(sub.reserveDelta)})`
                 );
             } else {
                 reserveLines.push(
-                    `  ${pos} ${resLabel.padEnd(17)} ${paint.dim("── aucun joueur éligible")}` +
-                    " ".repeat(14) + `→ banc si ${sub.replaces} blessé`
+                    `  ${pos} ${resLabel.padEnd(17)} ${paint.dim("── no eligible player")}` +
+                    " ".repeat(14) + `→ bench if ${sub.replaces} injured`
                 );
             }
         });
@@ -224,9 +223,9 @@ export class ConsoleReporter implements Reporter {
         const mark = (v: string) =>
             v === "✓" ? paint.green(v) : v === "✗" ? paint.red(v) : v === "½" ? paint.yellow(v) : paint.dim(v);
         const lines: string[] = [
-            paint.bold(`  CHIMIE DES SIGNES — ${fmtChemVerdict(a)}`),
+            paint.bold(`  SIGN CHEMISTRY — ${fmtChemVerdict(a)}`),
             "",
-            paint.bold(`     ${"Poste".padEnd(20)} ${"Signe".padEnd(22)} ${"Chimie".padStart(7)}  Effet  Connexion`),
+            paint.bold(`     ${"Position".padEnd(20)} ${"Sign".padEnd(22)} ${"Chem.".padStart(7)}  Effect Setter link`),
         ];
         a.starters.forEach((s, i) => {
             lines.push(
@@ -234,34 +233,34 @@ export class ConsoleReporter implements Reporter {
                 `${padEndAnsi(mark(fmtOn(s.active)), 5)}  ${mark(fmtOn(s.connected))}`
             );
         });
-        lines.push("", paint.dim("  Chimie : phase MB avant / phase MB arrière · ✓ actif · ½ une phase · ✗ inactif"));
+        lines.push("", paint.dim("  Chemistry: front-MB phase / back-MB phase · ✓ active · ½ one phase · ✗ inactive"));
         console.log("\n" + createBox(lines, 80).join("\n"));
     }
 
     reportLiberoRotation(analysis: LiberoRotationAnalysis): void {
         const lines: string[] = [
-            paint.bold("  LIBÉRO — ROTATION RÉCEPTION / SERVICE (2ᵉ libéro)"),
+            paint.bold("  LIBERO — RECEPTION / SERVE ROTATION (2nd libero)"),
         ];
 
         if (analysis.liberos.length > 0) {
             lines.push("");
             lines.push(paint.bold(
-                `  ${"Libéro".padEnd(24)} ${"Global".padStart(6)} ${"Récep.".padStart(7)} ` +
-                `${"Défense".padStart(8)}  Traits spécifiques`
+                `  ${"Libero".padEnd(24)} ${"Overall".padStart(7)} ${"Recep.".padStart(7)} ` +
+                `${"Defense".padStart(8)}  Phase-specific traits`
             ));
             for (const l of analysis.liberos) {
                 const marks =
                     (analysis.verdict !== "single" && analysis.receptionSpecialist?.player === l.player
-                        ? " " + paint.cyan("◄ récep") : "") +
+                        ? " " + paint.cyan("◄ recep") : "") +
                     (analysis.verdict !== "single" && analysis.defenseSpecialist?.player === l.player
-                        ? " " + paint.magenta("◄ déf") : "");
+                        ? " " + paint.magenta("◄ def") : "");
                 const tags = [
-                    ...l.receptionOnlyTraits.map((t) => `${t} (récep)`),
-                    ...l.defenseOnlyTraits.map((t) => `${t} (déf)`),
+                    ...l.receptionOnlyTraits.map((t) => `${t} (recep)`),
+                    ...l.defenseOnlyTraits.map((t) => `${t} (def)`),
                 ].join(", ") || paint.dim("—");
                 lines.push(
                     `  ${l.player.fullName.padEnd(24)} ` +
-                    `${scoreColor(l.overallScore)(l.overallScore.toFixed(0).padStart(6))} ` +
+                    `${scoreColor(l.overallScore)(l.overallScore.toFixed(0).padStart(7))} ` +
                     `${scoreColor(l.receptionScore)(l.receptionScore.toFixed(0).padStart(7))} ` +
                     `${scoreColor(l.defenseScore)(l.defenseScore.toFixed(0).padStart(8))}  ` +
                     `${tags}${marks}`
@@ -270,10 +269,10 @@ export class ConsoleReporter implements Reporter {
         }
 
         const badge = {
-            system:      paint.green("✓ ROTATION CONSEILLÉE"),
-            situational: paint.yellow("~ ROTATION SITUATIONNELLE"),
-            none:        paint.dim("• PAS DE ROTATION"),
-            single:      paint.yellow("⚠ UN SEUL LIBÉRO"),
+            system:      paint.green("✓ ROTATION ADVISED"),
+            situational: paint.yellow("~ SITUATIONAL ROTATION"),
+            none:        paint.dim("• NO ROTATION"),
+            single:      paint.yellow("⚠ ONLY ONE LIBERO"),
         }[analysis.verdict];
 
         lines.push("");
@@ -307,46 +306,46 @@ export class ConsoleReporter implements Reporter {
         this.section("ACADEMY & PROGRESSION");
 
         const fmtMove = (m: AcademyMove, withSlot: boolean): string => {
-            const sc = m.score !== null ? `Score : ${scoreColor(m.score)(m.score.toFixed(0).padStart(3))}` : "Score :   —";
+            const sc = m.score !== null ? `Score: ${scoreColor(m.score)(m.score.toFixed(0).padStart(3))}` : "Score:   —";
             const slot = withSlot && m.slot
-                ? `→ ${m.slot}${m.displaces ? paint.dim(` (à la place de ${m.displaces})`) : ""}`
+                ? `→ ${m.slot}${m.displaces ? paint.dim(` (instead of ${m.displaces})`) : ""}`
                 : paint.dim(m.reason);
             const tooOld = withSlot && m.player.age > SETTINGS.academy.maxAge ? paint.dim(` · ${m.reason}`) : "";
-            return `  ${m.player.fullName.padEnd(24)} ${String(m.player.age).padStart(2)} ans  ${sc}  ${slot}${tooOld}`;
+            return `  ${m.player.fullName.padEnd(24)} ${String(m.player.age).padStart(2)} y.o.  ${sc}  ${slot}${tooOld}`;
         };
 
-        const lines: string[] = [paint.bold(`  ACADEMY (éligible ≤ ${SETTINGS.academy.maxAge} ans)`), ""];
-        lines.push(paint.bold(`  ${paint.green("⬆")} SORTIR DE L'ACADEMY (${academy.out.length})`));
-        if (academy.out.length === 0) lines.push(paint.dim("  — aucun"));
+        const lines: string[] = [paint.bold(`  ACADEMY (eligible up to age ${SETTINGS.academy.maxAge})`), ""];
+        lines.push(paint.bold(`  ${paint.green("⬆")} MOVE OUT OF THE ACADEMY (${academy.out.length})`));
+        if (academy.out.length === 0) lines.push(paint.dim("  — none"));
         for (const m of academy.out) lines.push(fmtMove(m, m.slot !== null));
-        lines.push("", paint.bold(`  ${paint.cyan("⬇")} ENVOYER À L'ACADEMY (${academy.in.length})`));
-        if (academy.in.length === 0) lines.push(paint.dim("  — aucun"));
+        lines.push("", paint.bold(`  ${paint.cyan("⬇")} SEND TO THE ACADEMY (${academy.in.length})`));
+        if (academy.in.length === 0) lines.push(paint.dim("  — none"));
         for (const m of academy.in) lines.push(fmtMove(m, false));
-        lines.push("", paint.bold(`  • RESTENT À L'ACADEMY (${academy.stay.length})`));
-        if (academy.stay.length === 0) lines.push(paint.dim("  — aucun"));
+        lines.push("", paint.bold(`  • STAYING AT THE ACADEMY (${academy.stay.length})`));
+        if (academy.stay.length === 0) lines.push(paint.dim("  — none"));
         for (const m of academy.stay) lines.push(fmtMove(m, false));
         console.log("\n" + createBox(lines, 80).join("\n"));
 
-        const prog: string[] = [paint.bold("  PROGRESSION — JOUEURS QUI NE PROGRESSENT PLUS")];
+        const prog: string[] = [paint.bold("  PROGRESS — PLAYERS NO LONGER IMPROVING")];
         if (av.declining.length === 0 && av.retiring.length === 0) {
-            prog.push("", `  ${paint.green("✓")} Tous les joueurs actifs progressent encore.`);
+            prog.push("", `  ${paint.green("✓")} All active players are still improving.`);
         }
         if (av.declining.length > 0) {
-            prog.push("", paint.bold(`  STARTING TO DECLINE (gardé si gain six de départ ≥ +${SETTINGS.availability.declineExceptionalMinGain})`));
+            prog.push("", paint.bold(`  STARTING TO DECLINE (kept if starting-six gain ≥ +${SETTINGS.availability.declineExceptionalMinGain})`));
             for (const d of av.declining) {
                 const verdict = d.kept
-                    ? paint.green("✓ exceptionnel : disponible")
-                    : paint.red("✗ exclu, à libérer");
+                    ? paint.green("✓ exceptional: available")
+                    : paint.red("✗ excluded, release");
                 prog.push(
-                    `  ${d.player.fullName.padEnd(24)} ${String(d.player.age).padStart(2)} ans  ` +
+                    `  ${d.player.fullName.padEnd(24)} ${String(d.player.age).padStart(2)} y.o.  ` +
                     `gain ${(d.gain >= 0 ? "+" : "") + d.gain.toFixed(1)}  ${verdict}`
                 );
             }
         }
         if (av.retiring.length > 0) {
-            prog.push("", paint.bold("  CONSIDERING RETIREMENT (exclu, à libérer)"));
+            prog.push("", paint.bold("  CONSIDERING RETIREMENT (excluded, release)"));
             for (const p of av.retiring) {
-                prog.push(`  ${p.fullName.padEnd(24)} ${String(p.age).padStart(2)} ans  ${paint.red("✗ exclu")}`);
+                prog.push(`  ${p.fullName.padEnd(24)} ${String(p.age).padStart(2)} y.o.  ${paint.red("✗ excluded")}`);
             }
         }
         console.log("\n" + createBox(prog, 80).join("\n"));
@@ -356,7 +355,7 @@ export class ConsoleReporter implements Reporter {
      * Points faibles de l'équipe (section 5).
      */
     reportWeaknessAnalysis(analysis: WeaknessAnalysis): void {
-        this.section("POINTS FAIBLES DE L'ÉQUIPE (5-1)");
+        this.section("TEAM WEAK SPOTS (5-1)");
         console.log();
 
         for (const rw of analysis.roleWeaknesses) {
@@ -364,19 +363,19 @@ export class ConsoleReporter implements Reporter {
             const color = scoreColor(rw.topScore);
             console.log(
                 `  ${rw.label.padEnd(24)} ${rw.topPlayer.padEnd(24)} ` +
-                `${color(bar.padEnd(20))} Score : ${color(rw.topScore.toFixed(0))}`
+                `${color(bar.padEnd(20))} Score: ${color(rw.topScore.toFixed(0))}`
             );
-            console.log(paint.dim(`  ${" ".padEnd(24)} Stats prioritaires : ${rw.keyWeakStats.join(", ")}`));
+            console.log(paint.dim(`  ${" ".padEnd(24)} Priority stats: ${rw.keyWeakStats.join(", ")}`));
             console.log();
         }
 
-        console.log("  Couverture des traits dans le six de départ :");
-        console.log(`  ${paint.green("Solide (≥2)")} : ${analysis.presentTraits.join(", ") || "—"}`);
+        console.log("  Trait coverage in the starting six:");
+        console.log(`  ${paint.green("Solid (≥2)")}  : ${analysis.presentTraits.join(", ") || "—"}`);
         if (analysis.weakTraits.length) {
             console.log(`  ${paint.yellow("Fragile (1×)")} : ${analysis.weakTraits.join(", ")}`);
         }
         if (analysis.missingTraits.length) {
-            console.log(`  ${paint.red("Absents")}     : ${analysis.missingTraits.join(", ")}`);
+            console.log(`  ${paint.red("Missing")}     : ${analysis.missingTraits.join(", ")}`);
         }
     }
 
@@ -385,26 +384,26 @@ export class ConsoleReporter implements Reporter {
      */
     reportRecruitmentAnalysis(analysis: RecruitmentAnalysis): void {
         const lines: string[] = [
-            paint.bold("  FILTRE DE RECRUTEMENT"),
+            paint.bold("  RECRUITMENT FILTER"),
             analysis.top3Signs.length
-                ? "  Règle les 3 rôles + 3 traits + 3 signes ci-dessous dans l'écran de recrutement."
-                : "  Règle les 3 rôles + 3 traits ci-dessous dans l'écran de recrutement.",
+                ? "  Set the 3 roles + 3 traits + 3 signs below in the recruitment screen."
+                : "  Set the 3 roles + 3 traits below in the recruitment screen.",
             "",
-            paint.bold("  RÔLES (dans l'ordre de priorité)"),
+            paint.bold("  ROLES (by priority)"),
             ...analysis.top3Roles.map(({ label, reason }: RoleUrgency, i: number) =>
                 `  ${i + 1}. ${label.padEnd(22)} ${paint.dim(`— ${reason}`)}`
             ),
             "",
-            paint.bold("  TRAITS (pour ces 3 rôles)"),
+            paint.bold("  TRAITS (for these 3 roles)"),
             ...analysis.top3Traits.map(({ trait, reason }: TraitUrgency, i: number) =>
                 `  ${i + 1}. ${trait.padEnd(22)} ${paint.dim(`— ${reason}`)}`
             ),
         ];
         if (analysis.top3Signs.length) {
-            lines.push("", paint.bold("  SIGNES (pour ces 3 rôles)"));
+            lines.push("", paint.bold("  SIGNS (for these 3 roles)"));
             analysis.top3Signs.forEach(({ sign, reason }, i) => {
                 lines.push(
-                    `  ${i + 1}. ${`${SIGN_LABELS_FR[sign]} (${sign})`.padEnd(22)} ` +
+                    `  ${i + 1}. ${sign.padEnd(22)} ` +
                     `${paint.dim(`— ${reason}`)}`
                 );
             });
@@ -416,53 +415,53 @@ export class ConsoleReporter implements Reporter {
      * Gestion du roster — joueurs à vendre (affiché si > ROSTER_TARGET joueurs).
      */
     reportRosterBalance(result: RosterBalanceResult): void {
-        this.section("GESTION DU ROSTER — JOUEURS À VENDRE");
+        this.section("ROSTER MANAGEMENT — PLAYERS TO SELL");
 
         const roleCountStr = Object.entries(targetCounts())
             .map(([r, n]) => `${n} ${ROLE_LABELS[r as keyof typeof ROLE_LABELS].replace(" (OH)", "").replace(" (MB)", "").replace(" (OP)", "")}`)
             .join(" · ");
 
-        console.log(`\n  Roster actuel : ${result.totalPlayers} joueurs  |  Cible : ${rosterTarget()}`);
-        console.log(`  Composition cible : ${roleCountStr}\n`);
+        console.log(`\n  Current roster: ${result.totalPlayers} players  |  Target: ${rosterTarget()}`);
+        console.log(`  Target composition: ${roleCountStr}\n`);
 
         if (!result.feasible) {
             for (const s of result.shortfalls) {
                 const label = ROLE_LABELS[s.role];
-                console.log(`  ${paint.yellow("⚠")} Effectif insuffisant : ${label} — ${s.eligible} éligible${s.eligible > 1 ? "s" : ""} / ${s.target} requis (${s.kept} gardé${s.kept > 1 ? "s" : ""})`);
+                console.log(`  ${paint.yellow("⚠")} Not enough players: ${label} — ${s.eligible} eligible / ${s.target} required (${s.kept} kept)`);
             }
             if (result.flexKeeps.length > 0) {
                 const names = result.flexKeeps
                     .map(f => `${f.player.fullName}${f.bestRole ? ` (${ROLE_LABELS[f.bestRole]})` : ""}`)
                     .join(", ");
-                console.log(paint.dim(`    → ${result.flexKeeps.length} slot${result.flexKeeps.length > 1 ? "s" : ""} réattribué${result.flexKeeps.length > 1 ? "s" : ""} aux meilleurs joueurs restants : ${names}`));
+                console.log(paint.dim(`    → ${result.flexKeeps.length} slot${result.flexKeeps.length > 1 ? "s" : ""} reassigned to the best remaining players: ${names}`));
             }
             console.log();
         }
 
         console.log(
-            `  À vendre : ${result.toSell}` +
-            (result.forcedCount > 0 ? paint.dim(` (dont ${result.forcedCount} en priorité : ne progressent plus)`) : "") +
+            `  To sell: ${result.toSell}` +
+            (result.forcedCount > 0 ? paint.dim(` (including ${result.forcedCount} first: no longer improving)`) : "") +
             "\n"
         );
 
         if (result.sellCandidates.length === 0) {
-            console.log(`  ${paint.green("✓")} Aucun joueur à vendre.`);
+            console.log(`  ${paint.green("✓")} No player to sell.`);
             return;
         }
 
         const lines: string[] = [];
         for (const [i, c] of result.sellCandidates.entries()) {
             if (i === 0 && result.forcedCount > 0) {
-                lines.push(paint.bold("  EN PRIORITÉ — NE PROGRESSENT PLUS"));
+                lines.push(paint.bold("  FIRST — NO LONGER IMPROVING"));
             }
             if (i === result.forcedCount) {
                 if (i > 0) lines.push("");
-                lines.push(paint.bold("  QUOTA ROSTER (du moins bon au meilleur sur son meilleur rôle)"));
+                lines.push(paint.bold("  ROSTER QUOTA (worst to best on their best role)"));
             }
             const name    = c.player.fullName.padEnd(25);
             const rarity  = `[${c.player.rarity}]`.padEnd(12);
             const roleTag = c.bestRole ? ROLE_LABELS[c.bestRole].padEnd(24) : "—".padEnd(24);
-            const score   = c.bestScore > 0 ? `Score : ${c.bestScore.toFixed(0).padStart(3)}` : "non éligible";
+            const score   = c.bestScore > 0 ? `Score: ${c.bestScore.toFixed(0).padStart(3)}` : "not eligible";
             const why     = c.reason ? `  ${paint.dim(c.reason)}` : "";
             lines.push(`  ${String(i + 1).padStart(2)}. ${name} ${rarity} ${roleTag} ${score}${why}`);
         }
@@ -474,7 +473,7 @@ export class ConsoleReporter implements Reporter {
      */
     footer(): void {
         console.log("\n" + paint.dim(HR2));
-        console.log("  Analyse terminée.");
+        console.log("  Analysis complete.");
         console.log(paint.dim(HR2) + "\n");
     }
 }

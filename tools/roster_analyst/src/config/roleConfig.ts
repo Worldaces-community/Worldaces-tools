@@ -65,15 +65,15 @@ const ROLE_NAMES = ["setter", "outsideHitter", "middleBlocker", "oppositeHitter"
  */
 export function normalizeParams(input: unknown): Params {
     if (typeof input !== "object" || input === null) {
-        throw new Error("params.json invalide : objet JSON attendu.");
+        throw new Error("invalid params.json: JSON object expected.");
     }
     const params = JSON.parse(JSON.stringify(input)) as Params;
     if (typeof params.roles !== "object" || params.roles === null) {
-        throw new Error("params.json invalide : bloc « roles » manquant.");
+        throw new Error('invalid params.json: missing "roles" block.');
     }
     for (const role of ROLE_NAMES) {
         const cfg = params.roles[role];
-        if (!cfg) throw new Error(`params.json invalide : rôle « ${role} » manquant dans « roles ».`);
+        if (!cfg) throw new Error(`invalid params.json: role "${role}" missing from "roles".`);
         cfg.statsWeights ??= {};
         cfg.traitBonuses ??= {};
         cfg.signBonuses ??= {};
@@ -101,7 +101,7 @@ export function parseParams(text: string): Params {
     try {
         raw = JSON.parse(text);
     } catch (e) {
-        throw new Error(`params.json : JSON invalide (${(e as Error).message}).`);
+        throw new Error(`params.json: invalid JSON (${(e as Error).message}).`);
     }
     return normalizeParams(raw);
 }

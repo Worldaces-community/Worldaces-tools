@@ -18,7 +18,6 @@
 import { RoleName, Sign, ScoredPlayer } from "../types";
 import {
     LIBERO_SIGN_EFFECT,
-    SIGN_LABELS_FR,
     chemistryOf,
     SIGN_ACTIVATION_THRESHOLD,
     SETTER_SYNERGY_THRESHOLD,
@@ -178,11 +177,10 @@ export function fmtOn(values: (boolean | null)[]): string {
 /** Signe en FR (+ effet libéro entre parenthèses pour le libéro). */
 export function fmtSign(s: StarterChemistry): string {
     if (!s.sign) return "—";
-    const fr = SIGN_LABELS_FR[s.sign];
-    return s.slot === "Libero" ? `${fr} (${LIBERO_SIGN_EFFECT[s.sign]})` : fr;
+    return s.slot === "Libero" ? `${s.sign} (${LIBERO_SIGN_EFFECT[s.sign]})` : s.sign;
 }
 
 /** Verdict résumé : « 5.5/9 · ≈ +6.1 % de victoire ». */
 export function fmtChemVerdict(a: ChemistryAnalysis): string {
-    return `${a.units.toFixed(1)}/${UNITS_PER_PHASE} · ≈ +${(a.winGain * 100).toFixed(1)} % de victoire`;
+    return `${a.units.toFixed(1)}/${UNITS_PER_PHASE} · ≈ +${(a.winGain * 100).toFixed(1)} % win chance`;
 }

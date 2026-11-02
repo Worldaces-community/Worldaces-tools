@@ -125,22 +125,22 @@ function merge(base: Record<string, unknown>, override: unknown, path: string, f
         const p = path ? `${path}.${k}` : k;
         if (k.startsWith("_")) continue; // commentaires
         if (!(k in base)) {
-            console.warn(`⚠️  settings.${p} : réglage inconnu, ignoré.`);
+            console.warn(`⚠️  settings.${p}: unknown setting, ignored.`);
             continue;
         }
         const cur = base[k];
         if (freeKeys.has(p)) {
             if (isObj(v)) base[k] = { ...(cur as object), ...v };
-            else console.warn(`⚠️  settings.${p} : objet attendu, valeur par défaut gardée.`);
+            else console.warn(`⚠️  settings.${p}: object expected, default kept.`);
         } else if (isObj(cur)) {
             merge(cur, v, p, freeKeys);
         } else if (Array.isArray(cur)) {
             if (Array.isArray(v)) base[k] = v;
-            else console.warn(`⚠️  settings.${p} : liste attendue, valeur par défaut gardée.`);
+            else console.warn(`⚠️  settings.${p}: list expected, default kept.`);
         } else if (typeof v === typeof cur) {
             base[k] = v;
         } else {
-            console.warn(`⚠️  settings.${p} : ${typeof cur} attendu, valeur par défaut gardée.`);
+            console.warn(`⚠️  settings.${p}: ${typeof cur} expected, default kept.`);
         }
     }
 }
@@ -153,8 +153,8 @@ export function resolveSettings(override?: unknown): Settings {
     merge(s as unknown as Record<string, unknown>, override, "", FREE_KEYS);
     if (!(s.lineup.reserveObjectiveWeight < s.lineup.subObjectiveWeight && s.lineup.subObjectiveWeight < 1)) {
         console.warn(
-            "⚠️  settings.lineup : il faut 0 < reserveObjectiveWeight < subObjectiveWeight < 1 " +
-            "(sinon le banc peut passer devant les titulaires)."
+            "⚠️  settings.lineup: expected 0 < reserveObjectiveWeight < subObjectiveWeight < 1 " +
+            "(otherwise the bench may be preferred over the starters)."
         );
     }
     return s;

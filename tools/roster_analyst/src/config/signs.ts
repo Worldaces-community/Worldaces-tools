@@ -100,7 +100,7 @@ export const SIGN_SYNERGY_MAX_WIN_GAIN = 0.10;
 
 /** Effet libéro par signe (3 groupes). */
 export const LIBERO_SIGN_EFFECT: Record<Sign, string> = {
-    Taurus: "énergie", Leo: "énergie", Scorpio: "énergie", Aquarius: "énergie",
-    Gemini: "réflexes", Virgo: "réflexes", Sagittarius: "réflexes", Pisces: "réflexes",
-    Aries: "prend la balle", Cancer: "prend la balle", Libra: "prend la balle", Capricorn: "prend la balle",
+    Taurus: "energy", Leo: "energy", Scorpio: "energy", Aquarius: "energy",
+    Gemini: "reflexes", Virgo: "reflexes", Sagittarius: "reflexes", Pisces: "reflexes",
+    Aries: "takes the ball", Cancer: "takes the ball", Libra: "takes the ball", Capricorn: "takes the ball",
 };

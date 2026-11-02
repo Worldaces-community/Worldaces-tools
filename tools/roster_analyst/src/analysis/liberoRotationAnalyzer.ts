@@ -118,9 +118,9 @@ export function analyzeLiberoRotation(
             specialistsDiffer: false,
             verdict: "single",
             note: only
-                ? `Un seul libéro retenu (${only.player.fullName}) — pas de rotation réception/service ` +
-                  `possible. Recrute ou forme un 2ᵉ libéro pour activer ce système.`
-                : "Aucun libéro retenu.",
+                ? `Only one libero selected (${only.player.fullName}) — no reception/serve rotation ` +
+                  `possible. Recruit or develop a 2nd libero to enable it.`
+                : "No libero selected.",
         };
     }
 
@@ -151,34 +151,34 @@ export function analyzeLiberoRotation(
     switch (verdict) {
         case "system":
             note =
-                `Spécialisation nette : ${recSpec.player.fullName} reçoit mieux (${rec(receptionDelta)}) ` +
-                `et ${defSpec.player.fullName} défend mieux (${rec(defenseDelta)}). ` +
-                `Fais entrer ${recSpec.player.fullName} en phase de RÉCEPTION et ` +
-                `${defSpec.player.fullName} en phase de SERVICE (défense).`;
+                `Clear specialisation: ${recSpec.player.fullName} receives better (${rec(receptionDelta)}) ` +
+                `and ${defSpec.player.fullName} defends better (${rec(defenseDelta)}). ` +
+                `Bring ${recSpec.player.fullName} in for the RECEPTION phase and ` +
+                `${defSpec.player.fullName} for the SERVE (defense) phase.`;
             break;
         case "situational":
             if (receptionDelta >= SETTINGS.libero.subMinDelta) {
                 note =
-                    `Différenciation surtout en RÉCEPTION : ${recSpec.player.fullName} nettement meilleur ` +
-                    `receveur (${rec(receptionDelta)}). Fais-le entrer quand on reçoit ; en défense l'écart ` +
-                    `(${rec(defenseDelta)}) est faible, laisse ${defSpec.player.fullName} sinon.`;
+                    `Difference mostly in RECEPTION: ${recSpec.player.fullName} is a clearly better ` +
+                    `receiver (${rec(receptionDelta)}). Bring them in when receiving; in defense the gap ` +
+                    `(${rec(defenseDelta)}) is small, keep ${defSpec.player.fullName} otherwise.`;
             } else {
                 note =
-                    `Différenciation surtout en DÉFENSE : ${defSpec.player.fullName} nettement meilleur ` +
-                    `défenseur (${rec(defenseDelta)}). Fais-le entrer quand on sert ; en réception l'écart ` +
-                    `(${rec(receptionDelta)}) est faible, laisse ${recSpec.player.fullName} sinon.`;
+                    `Difference mostly in DEFENSE: ${defSpec.player.fullName} is a clearly better ` +
+                    `defender (${rec(defenseDelta)}). Bring them in when serving; in reception the gap ` +
+                    `(${rec(receptionDelta)}) is small, keep ${recSpec.player.fullName} otherwise.`;
             }
             break;
         case "none":
             if (!specialistsDiffer) {
                 note =
-                    `${recSpec.player.fullName} domine réception ET défense — pas de rotation utile. ` +
-                    `${otherThan(recSpec).player.fullName} reste doublure (blessure).`;
+                    `${recSpec.player.fullName} is better in both reception AND defense — no useful rotation. ` +
+                    `${otherThan(recSpec).player.fullName} stays as backup (injury).`;
             } else {
                 note =
-                    `Écarts négligeables (réception ${rec(receptionDelta)}, défense ${rec(defenseDelta)}, ` +
-                    `< ${SETTINGS.libero.subMinDelta} pts) — garde ${primary.player.fullName} sur les deux phases, ` +
-                    `la rotation n'en vaut pas la peine.`;
+                    `Negligible gaps (reception ${rec(receptionDelta)}, defense ${rec(defenseDelta)}, ` +
+                    `< ${SETTINGS.libero.subMinDelta} pts) — keep ${primary.player.fullName} for both phases, ` +
+                    `the rotation is not worth it.`;
             }
             break;
         default:

@@ -75,7 +75,7 @@ export function runAnalysis(
     );
 
     report((r) => r.reportLineup(
-        "LINEUP 5-1 RECOMMANDÉ",
+        "RECOMMENDED 5-1 LINEUP",
         fiveOneResult.lineup,
         LineupBuilder.getFiveOneOrder(),
         fiveOneSubs
@@ -85,7 +85,7 @@ export function runAnalysis(
         analyzeChemistry(fiveOneResult.lineup, LineupBuilder.getFiveOneOrder())
     ));
 
-    const liberoSub = fiveOneSubs.find((s) => s.label === "Remp. Libéro");
+    const liberoSub = fiveOneSubs.find((s) => s.label === "Sub Libero");
     const liberoRotation = analyzeLiberoRotation(
         [fiveOneResult.lineup["Libero"]?.player, liberoSub?.sub?.player],
         params.roles["libero"]
@@ -133,10 +133,10 @@ export function runAnalysis(
     progress("roster");
     const forcedSales = [
         ...availability.retiring.map((player) => ({
-            player, reason: "Considering retirement : ne progresse plus",
+            player, reason: "Considering retirement: no longer improving",
         })),
         ...availability.declining.filter((d) => !d.kept).map((d) => ({
-            player: d.player, reason: "Starting to decline, pas exceptionnel",
+            player: d.player, reason: "Starting to decline, not exceptional",
         })),
     ];
     if (players.length > rosterTarget() || forcedSales.length > 0) {

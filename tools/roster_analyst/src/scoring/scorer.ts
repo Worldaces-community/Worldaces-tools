@@ -84,8 +84,8 @@ function computeRawScores(
         if (!LOWERCASE_STATS.has(stat) && w > 0 && !warnedUppercaseWeights.has(stat)) {
             warnedUppercaseWeights.add(stat);
             console.warn(
-                `\u26A0\uFE0F  statsWeights["${stat}"]=${w} ignor\u00E9 : le score ne prend que les ` +
-                `attributs minuscules (le composite "${stat}" est d\u00E9j\u00E0 couvert par ses sous-stats).`
+                `⚠️  statsWeights["${stat}"]=${w} ignored: the score only uses the lowercase ` +
+                `sub-stats (the "${stat}" composite is already covered by its sub-stats).`
             );
         }
     }

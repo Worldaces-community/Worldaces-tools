@@ -16,7 +16,7 @@ import { parseCSVText, parseParams, runAnalysis, ConsoleReporter, MarkdownReport
 import { Reporter } from "./report";
 
 function usage(): never {
-    console.error("Usage : npm run analyze -- <roster.csv> <params.json> [--verbose] [--md <rapport.md>]");
+    console.error("Usage: npm run analyze -- <roster.csv> <params.json> [--verbose] [--md <report.md>]");
     process.exit(1);
 }
 
@@ -57,13 +57,13 @@ function main(): void {
 
     if (mdReporter && mdPath) {
         fs.writeFileSync(mdPath, mdReporter.toMarkdown(), "utf-8");
-        console.log(`  Rapport markdown écrit : ${mdPath}`);
+        console.log(`  Markdown report written: ${mdPath}`);
     }
 }
 
 try {
     main();
 } catch (e) {
-    console.error(`Erreur : ${(e as Error).message}`);
+    console.error(`Error: ${(e as Error).message}`);
     process.exit(1);
 }

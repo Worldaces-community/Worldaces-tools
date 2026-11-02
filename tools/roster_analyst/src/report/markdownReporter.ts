@@ -24,7 +24,6 @@ import { AcademyAnalysis, AcademyMove } from "../analysis/academyAnalyzer";
 import { SETTINGS } from "../config/settings";
 import { Reporter } from "./reporter";
 import { ChemistryAnalysis, fmtChem, fmtChemVerdict, fmtOn, fmtSign } from "../lineup/signChemistry";
-import { SIGN_LABELS_FR } from "../config/signs";
 import { ROLE_LABELS } from "../config/constants";
 
 /** Icône compacte de rareté (pas de couleur en markdown). */
@@ -96,11 +95,11 @@ export class MarkdownReporter implements Reporter {
 
     header(rosterCount: number, paramsPath: string, availableCount?: number): void {
         const avail = availableCount !== undefined && availableCount !== rosterCount
-            ? ` (${availableCount} disponibles pour la lineup)` : "";
+            ? ` (${availableCount} available for the lineup)` : "";
         this.push(
-            "# 🏐 World Aces – Analyse de roster",
+            "# 🏐 World Aces – Roster analysis",
             "",
-            `**Roster** : ${rosterCount} joueurs${avail} · **Params** : \`${paramsPath}\``
+            `**Roster**: ${rosterCount} players${avail} · **Params**: \`${paramsPath}\``
         );
     }
 
@@ -109,16 +108,16 @@ export class MarkdownReporter implements Reporter {
         roleLabels: Record<RoleName, string>,
         params: Params
     ): void {
-        this.section("CLASSEMENTS PAR RÔLE");
+        this.section("ROLE RANKINGS");
 
         for (const roleName of Object.keys(allRankings) as RoleName[]) {
             const ranked = allRankings[roleName];
             const top = ranked[0];
             this.openBlock(
                 `${roleLabels[roleName]} – top 10`,
-                top ? `n°1 : ${top.player.fullName} (${top.score.toFixed(0)})` : undefined
+                top ? `#1: ${top.player.fullName} (${top.score.toFixed(0)})` : undefined
             );
-            this.push("| # | Joueur | Rareté | Âge | Score | Traits |");
+            this.push("| # | Player | Rarity | Age | Score | Traits |");
             this.push("|--:|---|---|--:|--:|---|");
             ranked.slice(0, 10).forEach((s, i) => {
                 const p = s.player;
@@ -132,18 +131,18 @@ export class MarkdownReporter implements Reporter {
                 const fmtBonus = (v: number) => (v >= 0 ? `+${v}` : `${v}`);
                 this.push(
                     "",
-                    `*Poids des stats : ${Object.entries(config.statsWeights)
+                    `*Stat weights: ${Object.entries(config.statsWeights)
                         .filter(([, v]) => v !== 0)
                         .map(([k, v]) => `${k}×${v}`)
                         .join(" + ")}*`,
-                    `*Bonus de traits : ${Object.entries(config.traitBonuses)
+                    `*Trait bonuses: ${Object.entries(config.traitBonuses)
                         .filter(([, v]) => v !== 0)
                         .map(([k, v]) => `${k} (${fmtBonus(Math.round(v * 10) / 10)})`)
                         .join(", ")}*`
                 );
                 const signs = Object.entries(config.signBonuses ?? {}).filter(([, v]) => v !== 0);
                 if (signs.length) {
-                    this.push(`*Bonus de signes : ${signs.map(([k, v]) => `${k} (${fmtBonus(v)})`).join(", ")}*`);
+                    this.push(`*Sign bonuses: ${signs.map(([k, v]) => `${k} (${fmtBonus(v)})`).join(", ")}*`);
                 }
             }
             this.closeBlock();
@@ -160,7 +159,7 @@ export class MarkdownReporter implements Reporter {
 
         // Récapitulatif saisie en jeu — toujours visible : une ligne par position,
         // les 3 étages côte à côte.
-        this.push("| # | Poste | Titulaire | Remplaçant | Rés. blessure |");
+        this.push("| # | Position | Starter | Substitute | Injury reserve |");
         this.push("|--:|---|---|---|---|");
         lineupOrder.forEach((slot, i) => {
             const starter = lineup[slot] ? `**${lineup[slot]!.player.fullName}**` : "⚠️ —";
@@ -170,42 +169,42 @@ export class MarkdownReporter implements Reporter {
             this.push(`| ${i + 1} | ${slot} | ${starter} | ${subName} | ${resName} |`);
         });
 
-        this.openBlock("Titulaires (rareté & score)");
-        this.push("| # | Poste | Joueur | Rareté | Score |");
+        this.openBlock("Starters (rarity & score)");
+        this.push("| # | Position | Player | Rarity | Score |");
         this.push("|--:|---|---|---|--:|");
         lineupOrder.forEach((slot, i) => {
             const s = lineup[slot];
             this.push(
                 s
                     ? `| ${i + 1} | ${slot} | **${s.player.fullName}** | ${rarity(s.player.rarity as Rarity)} | ${scoreBadge(s.score)} |`
-                    : `| ${i + 1} | ${slot} | ⚠️ *aucun joueur éligible* | — | — |`
+                    : `| ${i + 1} | ${slot} | ⚠️ *no eligible player* | — | — |`
             );
         });
         this.closeBlock();
 
-        this.openBlock("Banc (rareté & score)");
-        this.push("| # | Slot | Joueur | Rareté | Score | Remplace |");
+        this.openBlock("Bench (rarity & score)");
+        this.push("| # | Slot | Player | Rarity | Score | Replaces |");
         this.push("|--:|---|---|---|--:|---|");
         substitutes.forEach((sub, i) => {
             this.push(
                 sub.sub
                     ? `| ${i + 1} | ${sub.label} | ${sub.sub.player.fullName} | ${rarity(sub.sub.player.rarity as Rarity)} | ` +
                       `${scoreBadge(sub.sub.score)} | ${sub.replaces} (${delta(sub.delta)}) |`
-                    : `| ${i + 1} | ${sub.label} | *aucun joueur éligible* | — | — | ${sub.replaces} |`
+                    : `| ${i + 1} | ${sub.label} | *no eligible player* | — | — | ${sub.replaces} |`
             );
         });
         this.closeBlock();
 
-        this.openBlock("Réservistes blessures (rareté & score)");
-        this.push("| # | Slot | Joueur | Rareté | Score | Banc si blessé |");
+        this.openBlock("Injury reserves (rarity & score)");
+        this.push("| # | Slot | Player | Rarity | Score | Bench if injured |");
         this.push("|--:|---|---|---|--:|---|");
         substitutes.forEach((sub, i) => {
-            const resLabel = sub.label.replace(/^Remp\./, "Rés.");
+            const resLabel = sub.label.replace(/^Sub /, "Res. ");
             this.push(
                 sub.reserve
                     ? `| ${i + 1} | ${resLabel} | ${sub.reserve.player.fullName} | ${rarity(sub.reserve.player.rarity as Rarity)} | ` +
                       `${scoreBadge(sub.reserve.score)} | ${sub.replaces} (${delta(sub.reserveDelta)}) |`
-                    : `| ${i + 1} | ${resLabel} | *aucun joueur éligible* | — | — | ${sub.replaces} |`
+                    : `| ${i + 1} | ${resLabel} | *no eligible player* | — | — | ${sub.replaces} |`
             );
         });
         this.closeBlock();
@@ -213,8 +212,8 @@ export class MarkdownReporter implements Reporter {
 
     reportSignChemistry(a: ChemistryAnalysis): void {
         if (!a.hasSigns) return;
-        this.openBlock("Chimie des signes", fmtChemVerdict(a));
-        this.push("| # | Poste | Joueur | Signe | Chimie | Effet | Connexion passeur |");
+        this.openBlock("Sign chemistry", fmtChemVerdict(a));
+        this.push("| # | Position | Player | Sign | Chemistry | Effect | Setter connection |");
         this.push("|--:|---|---|---|--:|:-:|:-:|");
         a.starters.forEach((s, i) => {
             this.push(
@@ -222,30 +221,30 @@ export class MarkdownReporter implements Reporter {
                 `${fmtOn(s.active)} | ${fmtOn(s.connected)} |`
             );
         });
-        this.push("", "*Chimie : phase MB avant / phase MB arrière (le libéro remplace le MB arrière) · ✓ actif · ½ une phase sur deux · ✗ inactif.*");
+        this.push("", "*Chemistry: front-MB phase / back-MB phase (the libero replaces the back MB) · ✓ active · ½ one phase out of two · ✗ inactive.*");
         this.closeBlock();
     }
 
     reportLiberoRotation(analysis: LiberoRotationAnalysis): void {
         const badge = {
-            system:      "✅ rotation conseillée",
-            situational: "🟡 rotation situationnelle",
-            none:        "pas de rotation",
-            single:      "⚠️ un seul libéro",
+            system:      "✅ rotation advised",
+            situational: "🟡 situational rotation",
+            none:        "no rotation",
+            single:      "⚠️ only one libero",
         }[analysis.verdict];
 
-        this.openBlock("Libéro — rotation réception / service (2ᵉ libéro)", badge);
+        this.openBlock("Libero — reception / serve rotation (2nd libero)", badge);
 
         if (analysis.liberos.length > 0) {
-            this.push("| Libéro | Global | Récep. | Défense | Traits spécifiques |");
+            this.push("| Libero | Overall | Recep. | Defense | Phase-specific traits |");
             this.push("|---|--:|--:|--:|---|");
             for (const l of analysis.liberos) {
                 const marks =
-                    (analysis.verdict !== "single" && analysis.receptionSpecialist?.player === l.player ? " ◄ récep" : "") +
-                    (analysis.verdict !== "single" && analysis.defenseSpecialist?.player === l.player ? " ◄ déf" : "");
+                    (analysis.verdict !== "single" && analysis.receptionSpecialist?.player === l.player ? " ◄ recep" : "") +
+                    (analysis.verdict !== "single" && analysis.defenseSpecialist?.player === l.player ? " ◄ def" : "");
                 const tags = [
-                    ...l.receptionOnlyTraits.map((t) => `${t} (récep)`),
-                    ...l.defenseOnlyTraits.map((t) => `${t} (déf)`),
+                    ...l.receptionOnlyTraits.map((t) => `${t} (recep)`),
+                    ...l.defenseOnlyTraits.map((t) => `${t} (def)`),
                 ].join(", ") || "—";
                 this.push(
                     `| **${l.player.fullName}**${marks} | ${scoreBadge(l.overallScore)} | ` +
@@ -264,13 +263,13 @@ export class MarkdownReporter implements Reporter {
         const score = (m: AcademyMove) => (m.score !== null ? scoreBadge(m.score) : "—");
         const table = (moves: AcademyMove[], withSlot: boolean): void => {
             if (moves.length === 0) {
-                this.push("*Aucun.*");
+                this.push("*None.*");
                 return;
             }
-            this.push(withSlot ? "| Joueur | Âge | Score | Slot visé | Motif |" : "| Joueur | Âge | Score | Motif |");
+            this.push(withSlot ? "| Player | Age | Score | Target slot | Reason |" : "| Player | Age | Score | Reason |");
             this.push(withSlot ? "|---|--:|--:|---|---|" : "|---|--:|--:|---|");
             for (const m of moves) {
-                const slot = m.slot ? `${m.slot}${m.displaces ? ` (à la place de ${m.displaces})` : ""}` : "—";
+                const slot = m.slot ? `${m.slot}${m.displaces ? ` (instead of ${m.displaces})` : ""}` : "—";
                 this.push(
                     withSlot
                         ? `| **${m.player.fullName}** | ${m.player.age} | ${score(m)} | ${slot} | ${m.reason} |`
@@ -279,45 +278,45 @@ export class MarkdownReporter implements Reporter {
             }
         };
 
-        this.push(`**Academy** (éligible ≤ ${SETTINGS.academy.maxAge} ans)`, "");
-        this.push(`#### ⬆️ Sortir de l'Academy (${academy.out.length})`, "");
+        this.push(`**Academy** (eligible up to age ${SETTINGS.academy.maxAge})`, "");
+        this.push(`#### ⬆️ Move out of the Academy (${academy.out.length})`, "");
         table(academy.out, true);
-        this.push("", `#### ⬇️ Envoyer à l'Academy (${academy.in.length})`, "");
+        this.push("", `#### ⬇️ Send to the Academy (${academy.in.length})`, "");
         table(academy.in, false);
 
-        this.openBlock("Restent à l'Academy", `${academy.stay.length} joueur(s)`);
+        this.openBlock("Staying at the Academy", `${academy.stay.length} player(s)`);
         table(academy.stay, false);
         this.closeBlock();
 
         const excluded = av.declining.filter((d) => !d.kept).length + av.retiring.length;
         this.openBlock(
-            "Progression — joueurs qui ne progressent plus",
-            excluded > 0 ? `🔴 ${excluded} exclu(s) de la lineup` : "✅ aucun exclu"
+            "Progress — players no longer improving",
+            excluded > 0 ? `🔴 ${excluded} excluded from the lineup` : "✅ none excluded"
         );
         if (av.declining.length === 0 && av.retiring.length === 0) {
-            this.push("✅ Tous les joueurs actifs progressent encore.");
+            this.push("✅ All active players are still improving.");
         } else {
-            this.push("| Joueur | Âge | Progression | Gain six de départ | Verdict |");
+            this.push("| Player | Age | Progress | Starting-six gain | Verdict |");
             this.push("|---|--:|---|--:|---|");
             for (const d of av.declining) {
                 const g = (d.gain >= 0 ? "+" : "") + d.gain.toFixed(1);
                 this.push(
                     `| ${d.player.fullName} | ${d.player.age} | Starting to decline | ${g} | ` +
-                    `${d.kept ? "🟢 exceptionnel : disponible" : "🔴 exclu, à libérer"} |`
+                    `${d.kept ? "🟢 exceptional: available" : "🔴 excluded, release"} |`
                 );
             }
             for (const p of av.retiring) {
-                this.push(`| ${p.fullName} | ${p.age} | Considering retirement | — | 🔴 exclu, à libérer |`);
+                this.push(`| ${p.fullName} | ${p.age} | Considering retirement | — | 🔴 excluded, release |`);
             }
-            this.push("", `*Déclinant gardé si gain ≥ +${SETTINGS.availability.declineExceptionalMinGain}.*`);
+            this.push("", `*Declining player kept if gain ≥ +${SETTINGS.availability.declineExceptionalMinGain}.*`);
         }
         this.closeBlock();
     }
 
     reportWeaknessAnalysis(analysis: WeaknessAnalysis): void {
-        this.section("POINTS FAIBLES DE L'ÉQUIPE (5-1)");
+        this.section("TEAM WEAK SPOTS (5-1)");
         this.push(
-            "| Rôle | Titulaire le plus faible | Score | Stats prioritaires |",
+            "| Role | Weakest starter | Score | Priority stats |",
             "|---|---|--:|---|"
         );
         for (const rw of analysis.roleWeaknesses) {
@@ -327,85 +326,85 @@ export class MarkdownReporter implements Reporter {
         }
         this.push(
             "",
-            "**Couverture des traits dans le six de départ :**",
+            "**Trait coverage in the starting six:**",
             "",
-            `- 🟢 Solide (≥2) : ${analysis.presentTraits.join(", ") || "—"}`
+            `- 🟢 Solid (≥2): ${analysis.presentTraits.join(", ") || "—"}`
         );
-        if (analysis.weakTraits.length) this.push(`- 🟡 Fragile (1×) : ${analysis.weakTraits.join(", ")}`);
-        if (analysis.missingTraits.length) this.push(`- 🔴 Absents : ${analysis.missingTraits.join(", ")}`);
+        if (analysis.weakTraits.length) this.push(`- 🟡 Fragile (1×): ${analysis.weakTraits.join(", ")}`);
+        if (analysis.missingTraits.length) this.push(`- 🔴 Missing: ${analysis.missingTraits.join(", ")}`);
     }
 
     reportRecruitmentAnalysis(analysis: RecruitmentAnalysis): void {
         this.openBlock(
-            "Filtre de recrutement",
+            "Recruitment filter",
             analysis.top3Roles.map((r) => r.label).join(" · ")
         );
         this.push(
             analysis.top3Signs.length
-                ? "Règle les 3 rôles + 3 traits + 3 signes ci-dessous dans l'écran de recrutement."
-                : "Règle les 3 rôles + 3 traits ci-dessous dans l'écran de recrutement.",
+                ? "Set the 3 roles + 3 traits + 3 signs below in the recruitment screen."
+                : "Set the 3 roles + 3 traits below in the recruitment screen.",
             ""
         );
-        this.push("**Rôles (dans l'ordre de priorité)**", "");
+        this.push("**Roles (by priority)**", "");
         analysis.top3Roles.forEach(({ label, reason }, i) => {
             this.push(`${i + 1}. **${label}** — *${reason}*`);
         });
-        this.push("", "**Traits (pour ces 3 rôles)**", "");
+        this.push("", "**Traits (for these 3 roles)**", "");
         analysis.top3Traits.forEach(({ trait, reason }, i) => {
             this.push(`${i + 1}. **${trait}** — *${reason}*`);
         });
         if (analysis.top3Signs.length) {
-            this.push("", "**Signes (pour ces 3 rôles)**", "");
+            this.push("", "**Signs (for these 3 roles)**", "");
             analysis.top3Signs.forEach(({ sign, reason }, i) => {
-                this.push(`${i + 1}. **${SIGN_LABELS_FR[sign]}** (${sign}) — *${reason}*`);
+                this.push(`${i + 1}. **${sign}** — *${reason}*`);
             });
         }
         this.closeBlock();
     }
 
     reportRosterBalance(result: RosterBalanceResult): void {
-        this.section("GESTION DU ROSTER — JOUEURS À VENDRE");
+        this.section("ROSTER MANAGEMENT — PLAYERS TO SELL");
 
         const roleCountStr = Object.entries(targetCounts())
             .map(([r, n]) => `${n} ${ROLE_LABELS[r as keyof typeof ROLE_LABELS].replace(" (OH)", "").replace(" (MB)", "").replace(" (OP)", "")}`)
             .join(" · ");
         this.push(
-            `**Roster actuel** : ${result.totalPlayers} joueurs · **Cible** : ${rosterTarget()} (${roleCountStr})`,
+            `**Current roster**: ${result.totalPlayers} players · **Target**: ${rosterTarget()} (${roleCountStr})`,
             ""
         );
 
         if (!result.feasible) {
             for (const s of result.shortfalls) {
                 this.push(
-                    `> ⚠️ Effectif insuffisant : ${ROLE_LABELS[s.role]} — ${s.eligible} éligible(s) / ${s.target} requis (${s.kept} gardé(s))`
+                    `> ⚠️ Not enough players: ${ROLE_LABELS[s.role]} — ${s.eligible} eligible / ${s.target} required (${s.kept} kept)`
                 );
             }
             if (result.flexKeeps.length > 0) {
                 const names = result.flexKeeps
                     .map((f) => `${f.player.fullName}${f.bestRole ? ` (${ROLE_LABELS[f.bestRole]})` : ""}`)
                     .join(", ");
-                this.push(`> → ${result.flexKeeps.length} slot(s) réattribué(s) aux meilleurs joueurs restants : ${names}`);
+                this.push(`> → ${result.flexKeeps.length} slot(s) reassigned to the best remaining players: ${names}`);
             }
             this.push("");
         }
 
         this.push(
-            `**À vendre : ${result.toSell}**` +
-            (result.forcedCount > 0 ? ` (dont ${result.forcedCount} en priorité : ne progressent plus)` : ""),
+            `**To sell: ${result.toSell}**` +
+            (result.forcedCount > 0 ? ` (including ${result.forcedCount} first: no longer improving)` : ""),
             ""
         );
 
         if (result.sellCandidates.length === 0) {
-            this.push("✅ Aucun joueur à vendre.");
+            this.push("✅ No player to sell.");
             return;
         }
 
-        this.push("| # | Joueur | Rareté | Meilleur rôle | Score | Motif |");
+        this.push("| # | Player | Rarity | Best role | Score | Reason |");
         this.push("|--:|---|---|---|--:|---|");
         result.sellCandidates.forEach((c, i) => {
             const roleTag = c.bestRole ? ROLE_LABELS[c.bestRole] : "—";
-            const score = c.bestScore > 0 ? c.bestScore.toFixed(0) : "*non éligible*";
-            const why = c.reason ? `🔴 ${c.reason}` : "quota roster";
+            const score = c.bestScore > 0 ? c.bestScore.toFixed(0) : "*not eligible*";
+            const why = c.reason ? `🔴 ${c.reason}` : "roster quota";
             this.push(`| ${i + 1} | ${c.player.fullName} | ${rarity(c.player.rarity as Rarity)} | ${roleTag} | ${score} | ${why} |`);
         });
     }

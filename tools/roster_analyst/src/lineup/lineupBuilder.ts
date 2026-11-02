@@ -223,13 +223,13 @@ export class LineupBuilder {
 
     static getFiveOneSubSlots(): SubSlot[] {
         return [
-            { label: "Remp. Setter",   role: "setter",        replacesSlot: "Setter"               },
-            { label: "Remp. Front OH",  role: "outsideHitter",  replacesSlot: "Front Outside Hitter" },
-            { label: "Remp. Front MB",  role: "middleBlocker",  replacesSlot: "Front Middle Blocker" },
-            { label: "Remp. OP",        role: "oppositeHitter", replacesSlot: "Opposite"             },
-            { label: "Remp. Back OH",   role: "outsideHitter",  replacesSlot: "Back Outside Hitter"  },
-            { label: "Remp. Back MB",   role: "middleBlocker",  replacesSlot: "Back Middle Blocker"  },
-            { label: "Remp. Libéro",    role: "libero",         replacesSlot: "Libero"               },
+            { label: "Sub Setter",     role: "setter",        replacesSlot: "Setter"               },
+            { label: "Sub Front OH",   role: "outsideHitter",  replacesSlot: "Front Outside Hitter" },
+            { label: "Sub Front MB",   role: "middleBlocker",  replacesSlot: "Front Middle Blocker" },
+            { label: "Sub OP",         role: "oppositeHitter", replacesSlot: "Opposite"             },
+            { label: "Sub Back OH",    role: "outsideHitter",  replacesSlot: "Back Outside Hitter"  },
+            { label: "Sub Back MB",    role: "middleBlocker",  replacesSlot: "Back Middle Blocker"  },
+            { label: "Sub Libero",     role: "libero",         replacesSlot: "Libero"               },
         ];
     }
 
@@ -836,8 +836,8 @@ export class LineupBuilder {
 
         if (timedOut) {
             console.warn(
-                `⚠️  Synergie des signes : limite de ${LineupBuilder.synergyTimeLimitMs / 1000} s atteinte, ` +
-                `lineup = meilleure trouvée (optimalité non prouvée).`
+                `⚠️  Sign chemistry: ${LineupBuilder.synergyTimeLimitMs / 1000} s time limit reached, ` +
+                `lineup = best found so far (optimality not proven).`
             );
         }
         return { best, synergyValue: unitValue * starterUnits(bestS) };

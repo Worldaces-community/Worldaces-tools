@@ -114,5 +114,5 @@ export function formatPlayer(s: ScoredPlayer, rank: number): string {
     const p = s.player;
     const traits = p.traits.length ? paint.dim(` [${p.traits.join(", ")}]`) : "";
     return `  ${String(rank).padStart(2)}. ${rarityIcon(p.rarity)} ${p.fullName.padEnd(26)} ` +
-           `Score : ${paint.bold(s.score.toFixed(1).padStart(5))}  Âge : ${p.age}${traits}`;
+           `Score: ${paint.bold(s.score.toFixed(1).padStart(5))}  Age: ${p.age}${traits}`;
 }

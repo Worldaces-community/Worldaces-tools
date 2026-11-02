@@ -13,7 +13,7 @@ Analyses a World Aces roster export with **your own scoring profile** and produc
 5. **Roster management** — players to sell when the roster is over its target size (or not
    improving any more).
 
-The report itself is in French. No tuned profile is shipped: you decide how each stat, trait
+No tuned profile is shipped: you decide how each stat, trait
 and sign is worth for each role, and export it as a `params.json` you can reuse.
 
 Author: @Peariforme
@@ -104,7 +104,7 @@ ignored.
 - `statsWeights` — 0-10 per sub-stat; they are normalised, only the ratios matter.
   For `read block`/`commit block` and `quick`/`power` only the player's better stat counts.
 - `traitBonuses` / `signBonuses` — points added to the 0-99 stat score (negative allowed).
-- `settings` — see the table in [DESIGN.md](./DESIGN.md#réglages-settings).
+- `settings` — see the table in [DESIGN.md](./DESIGN.md#settings-settings).
 
 [`example_params.json`](./example_params.json) is the neutral template of the editor (all
 stats equal, no bonuses) — a starting point, not a recommendation.
@@ -112,7 +112,7 @@ stats equal, no bonuses) — a starting point, not a recommendation.
 ## How it works
 
 The scoring, lineup optimisation (MILP + branch & bound on sign chemistry), availability,
-academy, libero rotation, recruitment and roster rules are documented (in French) in
+academy, libero rotation, recruitment and roster rules are documented in
 [DESIGN.md](./DESIGN.md), along with the official trait / sign / sub-stat mechanics.
 
 ## Development

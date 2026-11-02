@@ -23,7 +23,7 @@ import { rankAll, isAcademy } from "./availabilityAnalyzer";
 
 export interface AcademyMove {
     player: Player;
-    /** Slot obtenu dans la lineup hypothétique (« Setter », « Remp. Front OH »…), null sinon. */
+    /** Slot obtenu dans la lineup hypothétique (« Setter », « Sub Front OH »…), null sinon. */
     slot:   string | null;
     score:  number | null;
     /** Occupant actuel de ce slot dans la lineup recommandée (section 5-1). */
@@ -101,17 +101,17 @@ export function analyzeAcademy(
     const stay: AcademyMove[] = [];
     for (const p of academy) {
         if (p.age > ACADEMY_MAX_AGE) {
-            out.push(move(p, `${p.age} ans > ${ACADEMY_MAX_AGE} : plus éligible`));
+            out.push(move(p, `age ${p.age} > ${ACADEMY_MAX_AGE}: no longer eligible`));
         } else if (slotOf.has(p.fullName)) {
-            out.push(move(p, "assez bon pour le roster"));
+            out.push(move(p, "good enough for the roster"));
         } else {
-            stay.push(move(p, "pas encore titulaire / banc"));
+            stay.push(move(p, "not a starter / sub yet"));
         }
     }
 
     const inMoves: AcademyMove[] = pool
         .filter((p) => !isAcademy(p) && p.age <= ACADEMY_MAX_AGE && !slotOf.has(p.fullName))
-        .map((p) => move(p, "hors titulaires / banc : progressera à l'Academy"));
+        .map((p) => move(p, "not a starter / sub: will progress at the Academy"));
 
     const byScore = (a: AcademyMove, b: AcademyMove) => (b.score ?? 0) - (a.score ?? 0);
     return { out: out.sort(byScore), in: inMoves.sort(byScore), stay: stay.sort(byScore) };

@@ -131,9 +131,9 @@ export function analyzeRecruitment(
                 shortage * 1_000_000 + (100 - Math.min(100, worstStarterScore)) + benchDelta;
 
             const reasons: string[] = [];
-            if (shortage > 0) reasons.push(`manque ${shortage} joueur(s) éligible(s)`);
-            reasons.push(`titulaire le plus faible à ${worstStarterScore.toFixed(0)}/100`);
-            if (benchDelta > 0) reasons.push(`banc à −${benchDelta.toFixed(0)}`);
+            if (shortage > 0) reasons.push(`short of ${shortage} eligible player(s)`);
+            reasons.push(`weakest starter at ${worstStarterScore.toFixed(0)}/100`);
+            if (benchDelta > 0) reasons.push(`bench at −${benchDelta.toFixed(0)}`);
 
             return {
                 role: rw.role,
@@ -211,13 +211,13 @@ export function selectSigns(
             urgency += bonusPts + dUnits * unitValue;
             const bits: string[] = [];
             if (bonus) bits.push(`bonus +${bonus}`);
-            if (dUnits) bits.push(`chimie ${dUnits > 0 ? "+" : ""}${dUnits.toFixed(1)}`);
+            if (dUnits) bits.push(`chemistry ${dUnits > 0 ? "+" : ""}${dUnits.toFixed(1)}`);
             if (bits.length) parts.push(`${ROLE_SIGLES[role]} ${bits.join(", ")}`);
         }
         return {
             sign,
             urgency,
-            reason: parts.join(" · ") || "neutre",
+            reason: parts.join(" · ") || "neutral",
         };
     });
 
@@ -289,14 +289,14 @@ export function selectTraitTrio(
             if (bonus > 0) perRole.push(`${ROLE_SIGLES[role]}+${Math.round(bonus * 10) / 10}`);
         }
         const coverNote = isBanned
-            ? "déjà présent dans la lineup (trait unique) — exclu"
+            ? "already in the lineup (single-carrier trait) — excluded"
             : starterCount === 0
-            ? isSingleton ? "absent — priorité recrutement (trait unique)" : "absent de la lineup"
-            : starterCount === 1 ? "1 seul porteur"
-            : "déjà couvert";
+            ? isSingleton ? "missing — recruitment priority (single-carrier trait)" : "missing from the lineup"
+            : starterCount === 1 ? "only 1 carrier"
+            : "already covered";
         infos.set(trait, {
             trait, focusBenefit, perRoleEff, effective, isBanned,
-            reason: `${perRole.join(" · ") || "aucun bonus"} — ${coverNote}`,
+            reason: `${perRole.join(" · ") || "no bonus"} — ${coverNote}`,
         });
     }
 
