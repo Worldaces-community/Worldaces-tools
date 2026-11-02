@@ -38,3 +38,31 @@ jobs:
         run: |
           cd tools/${{ matrix.tool }}
           if [ -f metadata.json ]; then python -m json.tool metadata.json > /dev/null; fi
+
+  roster-analyst:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/roster_analyst
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: tools/roster_analyst/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck (CLI + browser bundle)
+        run: npm run typecheck
+
+      - name: Run the CLI on the example roster
+        run: npm run analyze -- example_roster.csv example_params.json --md /tmp/report.md && test -s /tmp/report.md
+
+      - name: Build the browser app
+        run: npm run build:browser && test -s web/dist/app.js && test -s web/dist/worker.js
+
+      - name: Check metadata.json is valid JSON
+        run: python -m json.tool metadata.json > /dev/null

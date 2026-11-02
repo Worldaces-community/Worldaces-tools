@@ -50,6 +50,11 @@ Same idea: open a PR for the relevant folder. As a courtesy, mention the origina
 (see the README roadmap) — in practice, this means no heavy dependencies unsupported by Pyodide,
 no mandatory disk or network access.
 
+**Node / TypeScript tools with their own web app**: add a `build:browser` script to the tool's
+`package.json` (the Pages workflow runs `npm ci && npm run build:browser` for every tool that has
+one) and point `"browser_build"` in `metadata.json` to the output folder (it must contain an
+`index.html`; it is published as `docs/<tool>/`). See `tools/roster_analyst`.
+
 ## Repo rights
 
 - **Maintainers** (direct write access): small trusted core, can merge PRs and manage repo settings.

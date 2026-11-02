@@ -12,13 +12,15 @@ and an example input file.
 | Tool | Description | Author |
 |---|---|---|
 | [`ledger_bars`](./tools/ledger_bars) | Two-panel bar chart of income vs expenses from a JSON/CSV transaction export | @Gutek |
+| [`roster_analyst`](./tools/roster_analyst) | 5-1 lineup, academy moves, recruitment targets and players to sell from your roster CSV — in-browser settings editor with exportable `params.json` (TypeScript, CLI + web) | @Peariforme |
 
 *(This table is updated whenever a new tool is accepted — see [CONTRIBUTING.md](./CONTRIBUTING.md).)*
 
 ## Use a tool
 
 Each tool is independent: go to its folder, read its `README.md`, install its
-dependencies (`pip install -r requirements.txt`) and follow the instructions.
+dependencies (`pip install -r requirements.txt`, or `npm ci` for Node tools) and follow the
+instructions. Some tools also run directly in the browser from the GitHub Pages site.
 
 ## Contribute
 

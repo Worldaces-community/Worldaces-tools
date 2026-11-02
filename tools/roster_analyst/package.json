@@ -1,0 +1,24 @@
+{
+  "name": "worldaces-roster-analyst",
+  "version": "2.0.0",
+  "description": "World Aces – 5-1 roster analyst (CLI + browser app)",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "analyze": "ts-node src/cli.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p web/tsconfig.json",
+    "build:browser": "node web/build.mjs",
+    "verify-lineup": "ts-node src/tools/verifyLineup.ts"
+  },
+  "dependencies": {
+    "yalps": "^0.6.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "dompurify": "^3.2.6",
+    "esbuild": "^0.25.10",
+    "marked": "^16.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  }
+}
