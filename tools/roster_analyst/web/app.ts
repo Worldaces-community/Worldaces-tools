@@ -13,7 +13,7 @@ import type { Player, Sign } from "../src/types";
 import {
     EditableParams, ROLES, ROLE_TITLES, STATS, TRAITS, SIGNS, RANGES,
     neutralParams, importParams, exportParams,
-    STAT_HELP, TRAIT_HELP, SIGN_HELP, LIBERO_SIGN_HELP,
+    STAT_HELP, TRAIT_HELP, SIGN_HELP, LIBERO_SIGN_HELP, SETTER_SIGN_HELP,
 } from "./schema";
 import type { WorkerMessage, WorkerRequest } from "./worker";
 import type { RoleName } from "../src/types";
@@ -191,7 +191,7 @@ function renderRolePanel(): void {
     }));
     const signCtl = SIGNS.map((s) => slider({
         label: s,
-        help: role === "libero" ? LIBERO_SIGN_HELP[s] : role === "setter" ? "Setters have no sign effect (only the setter–attacker connection)" : SIGN_HELP[s],
+        help: role === "libero" ? LIBERO_SIGN_HELP[s] : role === "setter" ? SETTER_SIGN_HELP : SIGN_HELP[s],
         ...RANGES.sign, compact: true,
         get: () => cfg.signBonuses[s] ?? 0, set: (v) => (cfg.signBonuses[s] = v),
     }));
