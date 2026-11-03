@@ -49,6 +49,11 @@ function bestScore(p: Player, rankings: ReturnType<typeof rankAll>): number | nu
     return best;
 }
 
+/** Joueurs de la lineup hypothétique : disponibles + Academy encore éligible. */
+export function academyLineupPlayers(pool: Player[], academy: Player[]): Player[] {
+    return [...pool, ...academy.filter((p) => p.age <= SETTINGS.academy.maxAge)];
+}
+
 /**
  * @param pool        joueurs disponibles pour la lineup (hors Academy)
  * @param academy     joueurs actuellement à l'Academy
@@ -63,8 +68,7 @@ export function analyzeAcademy(
     subs: Substitute[]
 ): AcademyAnalysis {
     const ACADEMY_MAX_AGE = SETTINGS.academy.maxAge;
-    const eligibleAcademy = academy.filter((p) => p.age <= ACADEMY_MAX_AGE);
-    const rankings = rankAll([...pool, ...eligibleAcademy], params);
+    const rankings = rankAll(academyLineupPlayers(pool, academy), params);
     // Scores d'affichage : tout l'Academy (y compris les > 20 ans, hors lineup hypothétique).
     const displayRankings = rankAll([...pool, ...academy], params);
 

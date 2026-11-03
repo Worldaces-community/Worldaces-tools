@@ -59,16 +59,34 @@ export interface AvailabilityResult {
     retiring:  Player[];
 }
 
+function splitActive(players: Player[]) {
+    const active = players.filter((p) => !isAcademy(p));
+    return {
+        academy:   players.filter(isAcademy),
+        improving: active.filter((p) => p.progress === "Improving"),
+        retiring:  active.filter((p) => p.progress === "Considering retirement"),
+        decliners: active.filter((p) => p.progress === "Starting to decline"),
+    };
+}
+
+/**
+ * Joueurs des lineups que `analyzeAvailability` optimise (base « Improving »
+ * puis base + chaque déclinant) : indépendantes, calculables en parallèle.
+ */
+export function availabilityLineupPools(players: Player[]): Player[][] {
+    const { improving, decliners } = splitActive(players);
+    return [
+        ...(improving.length > 0 ? [improving] : []),
+        ...decliners.map((player) => [...improving, player]),
+    ];
+}
+
 export function analyzeAvailability(players: Player[], params: Params): AvailabilityResult {
-    const academy  = players.filter(isAcademy);
-    const active   = players.filter((p) => !isAcademy(p));
-    const improving = active.filter((p) => p.progress === "Improving");
-    const retiring  = active.filter((p) => p.progress === "Considering retirement");
+    const { academy, improving, retiring, decliners } = splitActive(players);
 
     // Chaque déclinant est évalué seul face à la base « Improving ».
     const base = improving.length > 0 ? starterTotal(improving, params) : 0;
-    const declining: DecliningEval[] = active
-        .filter((p) => p.progress === "Starting to decline")
+    const declining: DecliningEval[] = decliners
         .map((player) => {
             const gain = starterTotal([...improving, player], params) - base;
             return { player, gain, kept: gain >= SETTINGS.availability.declineExceptionalMinGain };

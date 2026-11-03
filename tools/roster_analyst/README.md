@@ -47,6 +47,8 @@ npm run analyze -- my_roster.csv my_params.json --verbose --md report.md
 - `--verbose` adds the score formulas and trait/sign bonuses per role.
 - `--md <file>` also writes the report as GitHub Markdown (e.g. for a GitHub Actions job
   summary: `cat report.md >> "$GITHUB_STEP_SUMMARY"`).
+- `--sequential` computes the lineups one after the other instead of in parallel (one worker
+  thread per core; same report).
 - Colours are automatic on a terminal (`NO_COLOR` disables them, `FORCE_COLOR=1` forces them).
 
 ### Using it from your own (private) repository

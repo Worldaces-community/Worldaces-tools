@@ -13,7 +13,11 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
 await build({
-    entryPoints: { app: join(here, "app.ts"), worker: join(here, "worker.ts") },
+    entryPoints: {
+        app: join(here, "app.ts"),
+        worker: join(here, "worker.ts"),
+        lineupWorker: join(here, "lineupWorker.ts"),
+    },
     outdir: out,
     bundle: true,
     format: "iife",
