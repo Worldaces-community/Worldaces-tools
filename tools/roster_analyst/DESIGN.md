@@ -59,12 +59,13 @@ wrong type is ignored with a warning.
 | `lineup.synergyTimeLimitSec` | branch & bound time limit |
 | `availability.declineExceptionalMinGain` | minimum gain to keep a "Starting to decline" player |
 | `academy.maxAge` | maximum (inclusive) academy-eligible age |
-| `libero.subMinDelta` | minimum gap to advise the libero rotation |
+| `libero.subMinDelta` | minimum gain (2nd libero's lead in their best phase) to advise the libero rotation |
+| `libero.receptionOnlyTraits` / `defenseOnlyTraits` | reception / defense split of the libero traits (a trait not listed counts in both phases) |
 | `roster.target` / `roster.targetCounts` | target roster size and max quota per role |
 | `recruitment.singletonTraits` / `singletonPriorityBonus` / `singletonTraitPositions` | "single-carrier" traits in recruitment |
 
 **Game mechanics** constants (sign matrix, activation thresholds, +10 % win chance,
-exclusive pairs, redundant traits, reception/defense split of the libero) stay in the code.
+exclusive pairs, redundant traits) stay in the code.
 
 ## Report & modelling rules
 
@@ -136,20 +137,25 @@ exclusive pairs, redundant traits, reception/defense split of the libero) stay i
   game lets the 2nd libero come in/out depending on the **phase** (reception = receiving the
   serve; serve = serving then defending/digging). The two selected liberos (5-1 starter + their
   "Sub Libero") are compared on **two separate sub-profiles** derived from the libero config
-  (`deriveLiberoReception` / `deriveLiberoDefense`, `roleConfig.ts`): a **RECEPTION** profile
-  (sub-stats `LIBERO_RECEPTION_SUBSTATS` = `reception` + common) and a **DEFENSE** profile
-  (`LIBERO_DEFENSE_SUBSTATS` = `defense` + common). On stats **only `reception` and `defense`
-  discriminate**; all other sub-stats (overhand, bump, awareness, focus, stamina, reflex,
-  setting) are **common** to both phases. **Traits are split**: `LIBERO_RECEPTION_ONLY_TRAITS`
-  = Guardian (hidden from the defense profile — "better reception stats");
-  `LIBERO_DEFENSE_ONLY_TRAITS` = Defensive Specialist ("not serve receive") + Last Resort
-  (rescue dig), hidden from the reception profile. Shared traits (Master Mind 1st/2nd touch,
-  Quick Learner, Overachiever, Vigorous, team traits) count in both. This gives the **best
-  receiver** and the **best defender**; verdict based on `settings.libero.subMinDelta` (0-99
-  scale): `system` (clear specialisation in both phases → reception/serve rotation advised),
-  `situational` (clear in only 1 phase), `none` (one libero dominates both phases, or negligible
-  gaps → keep the best overall), `single` (only one libero selected). Sub-block of the 5-1
-  section (unnumbered).
+  (`deriveLiberoReception` / `deriveLiberoDefense`, `roleConfig.ts`): same stat weights, trait
+  and sign bonuses as the libero profile, minus the traits the **settings** reserve to the
+  other phase. **Only traits tell the phases apart**: the official descriptions of
+  `reception`, `defense`, `bump`, `overhand`, `reflex`, `focus` all cover serve receive AND
+  digs, so every sub-stat counts in both phases. The trait split is each manager's
+  interpretation (`settings.libero.receptionOnlyTraits` / `defenseOnlyTraits`; a trait not
+  listed counts in both, a trait listed on both sides is put back in both with a warning;
+  editor: one "Both / Reception only / Defense only" choice per trait). Defaults: Guardian =
+  reception only (takes a teammate's reception), Defensive Specialist ("not serve receive") +
+  Last Resort (rescue dig) = defense only. Sign bonuses are kept in both (the libero sign
+  effects apply to receptions and digs). **Decision**: if one libero
+  scores better in both phases, they play the whole match (`none`). Otherwise the **primary**
+  (best overall libero score) plays by default and the rotation brings the other one in for
+  the only phase where they score better: the **gain** of the rotation is that single number
+  (2nd libero's phase score − primary's), the primary's lead in their own phase is not a gain.
+  Verdict: `rotate` if gain ≥ `settings.libero.subMinDelta` (0-99 scale; margin for the
+  uncertainty of trait bonuses and the sign chemistry change, not modelled), `none` otherwise,
+  `single` (only one libero selected). The table marks who plays each phase (◄ recep / ◄ def).
+  Sub-block of the 5-1 section (unnumbered).
 - **Recruitment — 3 signs** (`selectSigns`): for each sign, on each of the 3 targeted roles, the
   weakest starter of the role is replaced by a recruit with the same score carrying that sign;
   contribution = sign bonus of the role (normalised 0-99) + change in starters' chemistry units
@@ -329,24 +335,24 @@ quick/power pair-max.
 
 | Sub-stat | Official effect |
 |---|---|
-| setting | Set quality + ability to run a fast offense (Quick tempo) |
-| serve | Serve power; high level = unlocks jump serves and more aces |
-| spike | Power and accuracy of normal attacks |
-| quick | Attack on fast, low sets |
-| power | Attack on high sets and slow balls |
-| awareness | Frequency of **exceptional** attacks/serves/sets + frequency of front-row setter dumps |
-| attack | **Strength** of those exceptional actions (attacks, serves, dumps) |
-| back attack | Contributes to the attack rating **from the back row** |
-| reception | Serve-receive and dig quality; low = targeted by opposing servers |
-| overhand | Two-handed overhead pass: used to set AND to receive float serves |
-| bump | Forearm pass: against hard serves and to dig spikes |
-| block | Blocking strength at the net |
-| read block | Reading the set to form/time the block — **main blocking skill** |
-| commit block | Committing on a designated attacker — **only applies if dedicated blocking is set up** |
-| focus | Chance of an **exceptional** dig or block (defensive counterpart of awareness) |
-| defense | Dig and save quality |
-| stamina | Endurance: fatigue, error rate, bench recovery |
-| reflex | Reaction to fast balls: hard serves, setter dumps, surprise attacks |
+| setting | Quality and consistency of sets + delivering quick-tempo sets |
+| serve | Serve accuracy and reliability: fewer misses, faster, better placed |
+| spike | Strength and accuracy of spikes |
+| quick | Handling fast sets (quick, fast set, fast pipe) without an attack error; helps a setter deliver them |
+| power | Pace: harder spikes off high sets, faster and heavier serves |
+| awareness | Picking the smartest place to aim attacks and serves (gaps, weak spots) + how often a front-row setter dumps |
+| attack | Chance for spikes, dumps and serves to land better |
+| back attack | Attacking from the back row (pipe, back-row swing) |
+| reception | Ball control on defense: **receiving serves and digging attacks** |
+| overhand | Overhand passing / hand-setting: float serve receive, setting off a good pass, free balls, last touches |
+| bump | Forearm passing: hard / topspin serves, digging, bump-setting off a poor pass |
+| block | Block strength at the net |
+| read block | Reading the play to get up and time a block — **main blocking skill** |
+| commit block | Committing to an attacker — **only applies with dedicated blocking** |
+| focus | Precision of attacks and serves; avoids mix-ups with teammates on defense; harder to fake out at the block |
+| defense | Cleanliness of **receptions, digs and blocks** |
+| stamina | Endurance: tiring, bench recovery; tired players make more mistakes |
+| reflex | Reach and range on defense (dig, receive, help on a block); reacting to dumps and tips |
 
 ## Profile calibration method (by function)
 Each role's `statsWeights` are calibrated **by the actual function of the position** (see the

@@ -1,68 +1,69 @@
 /**
- * Rotation du 2ᵉ libéro — substitution réception / service.
+ * 2nd libero rotation — reception / serve substitution.
  *
- * Le jeu permet de faire entrer/sortir le 2ᵉ libéro selon la PHASE de jeu :
- *   - RÉCEPTION : on reçoit le service adverse
- *   - SERVICE   : on sert, puis on défend l'attaque adverse (dig)
+ * The game lets the 2nd libero come in / go out depending on the game PHASE:
+ *   - RECEPTION: we receive the opponent's serve
+ *   - SERVE    : we serve, then defend the opponent's attack (dig)
  *
- * Ce module compare nos 2 libéros sélectionnés (titulaire du 5-1 + son
- * remplaçant) sur DEUX sous-profils distincts dérivés de la config libéro :
- *   - un profil RÉCEPTION (sous-stats de réception + traits utiles en réception)
- *   - un profil DÉFENSE   (sous-stats de dig + traits utiles en défense)
+ * This module compares our 2 selected liberos (5-1 starter + their
+ * substitute) on TWO distinct sub-profiles derived from the libero config:
+ *   - a RECEPTION profile (libero stats + traits useful in reception)
+ *   - a DEFENSE   profile (libero stats + traits useful in defense)
  *
- * Les traits sont différenciés : Guardian ne compte qu'en réception, Defensive
- * Specialist et Last Resort ne comptent qu'en défense (cf. constants). On en
- * déduit lequel est le meilleur receveur et lequel le meilleur défenseur, et si
- * l'écart entre les deux justifie d'activer la rotation réception/service.
+ * Sub-stats count in both phases: only traits distinguish the
+ * profiles. The trait split is a user setting:
+ * settings.libero (by default Guardian in reception, Defensive Specialist and
+ * Last Resort in defense).
+ *
+ * Decision: the main libero (best overall score) plays by default; the
+ * rotation brings the other one in for the ONLY phase where they do
+ * better. The rotation gain is therefore a single number — their lead over the
+ * main libero in that phase — compared to settings.libero.subMinDelta (margin
+ * for the uncertainty of trait bonuses and the unmodeled sign chemistry).
  */
 
 import { Player, RoleConfig } from "../types";
 import { scorePlayer } from "../scoring";
 import { deriveLiberoReception, deriveLiberoDefense } from "../config/roleConfig";
-import {
-    LIBERO_RECEPTION_ONLY_TRAITS,
-    LIBERO_DEFENSE_ONLY_TRAITS,
-} from "../config/constants";
 import { SETTINGS } from "../config/settings";
 
 export interface LiberoPhaseScore {
     player: Player;
-    /** Score libéro global (profil de base) — départage / choix du primaire. */
+    /** Overall libero score (base profile) — picks the main libero. */
     overallScore: number;
-    /** Score sur le sous-profil RÉCEPTION (normalisé ~0-99). */
+    /** Score on the RECEPTION sub-profile (normalized ~0-99). */
     receptionScore: number;
-    /** Score sur le sous-profil DÉFENSE (normalisé ~0-99). */
+    /** Score on the DEFENSE sub-profile (normalized ~0-99). */
     defenseScore: number;
-    /** Traits présents utiles seulement en réception (ex. Guardian). */
+    /** Traits held that are useful only in reception (e.g. Guardian). */
     receptionOnlyTraits: string[];
-    /** Traits présents utiles seulement en défense (ex. Defensive Specialist). */
+    /** Traits held that are useful only in defense (e.g. Defensive Specialist). */
     defenseOnlyTraits: string[];
 }
 
 /**
- * - `single`      : un seul libéro → rotation impossible.
- * - `system`      : spécialisation nette dans les DEUX phases → rotation conseillée.
- * - `situational` : spécialisation nette dans UNE seule phase → rotation partielle.
- * - `none`        : un libéro domine les deux phases, ou écarts négligeables.
+ * - `single`: only one libero → rotation impossible.
+ * - `rotate`: the 2nd libero gains at least subMinDelta in one phase → bring them in there.
+ * - `none`  : one libero is better in both phases, or the gain is too small.
  */
-export type LiberoRotationVerdict = "single" | "system" | "situational" | "none";
+export type LiberoRotationVerdict = "single" | "rotate" | "none";
+
+export type LiberoPhase = "reception" | "defense";
 
 export interface LiberoRotationAnalysis {
     liberos: LiberoPhaseScore[];
-    /** Meilleur receveur (score réception max). */
-    receptionSpecialist: LiberoPhaseScore | null;
-    /** Meilleur défenseur (score défense max). */
-    defenseSpecialist: LiberoPhaseScore | null;
-    /** Libéro primaire (meilleur score global) — celui qui joue par défaut. */
+    /** Main libero (best overall score) — the one who plays by default. */
     primary: LiberoPhaseScore | null;
-    /** Δ réception = score du meilleur receveur − score de l'autre libéro (≥ 0). */
-    receptionDelta: number;
-    /** Δ défense = score du meilleur défenseur − score de l'autre libéro (≥ 0). */
-    defenseDelta: number;
-    /** Le meilleur receveur et le meilleur défenseur sont-ils 2 joueurs différents ? */
-    specialistsDiffer: boolean;
+    /** Recommended libero in the reception phase (= main unless rotating). */
+    receptionLibero: LiberoPhaseScore | null;
+    /** Recommended libero in the serve / defense phase (= main unless rotating). */
+    defenseLibero: LiberoPhaseScore | null;
+    /** Phase where the 2nd libero beats the main one (null: nowhere). */
+    rotationPhase: LiberoPhase | null;
+    /** Lead of the 2nd libero over the main one in `rotationPhase` (0 if none). */
+    gain: number;
     verdict: LiberoRotationVerdict;
-    /** Explication lisible de la décision. */
+    /** Human-readable explanation of the decision. */
     note: string;
 }
 
@@ -77,16 +78,19 @@ function phaseScore(
         overallScore:   scorePlayer(player, liberoConfig).score,
         receptionScore: scorePlayer(player, receptionConfig).score,
         defenseScore:   scorePlayer(player, defenseConfig).score,
-        receptionOnlyTraits: LIBERO_RECEPTION_ONLY_TRAITS.filter((t) => player.traits.includes(t)),
-        defenseOnlyTraits:   LIBERO_DEFENSE_ONLY_TRAITS.filter((t) => player.traits.includes(t)),
+        receptionOnlyTraits: SETTINGS.libero.receptionOnlyTraits.filter((t) => player.traits.includes(t)),
+        defenseOnlyTraits:   SETTINGS.libero.defenseOnlyTraits.filter((t) => player.traits.includes(t)),
     };
 }
 
+const PHASE_SCORE = { reception: "receptionScore", defense: "defenseScore" } as const;
+const PHASE_LABEL = { reception: "RECEPTION phase", defense: "SERVE / DEFENSE phase" };
+
 /**
- * Analyse la rotation du 2ᵉ libéro pour nos libéros sélectionnés.
+ * Analyzes the 2nd libero rotation for our selected liberos.
  *
- * @param liberos      Libéros retenus (titulaire + remplaçant) — les nullish sont ignorés.
- * @param liberoConfig Config libéro de base (params.roles.libero).
+ * @param liberos      Selected liberos (starter + substitute) — nullish ones are ignored.
+ * @param liberoConfig Base libero config (params.roles.libero).
  */
 export function analyzeLiberoRotation(
     liberos: (Player | null | undefined)[],
@@ -95,8 +99,8 @@ export function analyzeLiberoRotation(
     const receptionConfig = deriveLiberoReception(liberoConfig);
     const defenseConfig   = deriveLiberoDefense(liberoConfig);
 
-    // Filtre les nullish + dédoublonne par nom (un même joueur ne peut pas
-    // occuper les deux slots libéro, mais on se protège).
+    // Filter out nullish + dedupe by name (the same player cannot hold
+    // both libero slots, but guard against it anyway).
     const seen = new Set<string>();
     const scored: LiberoPhaseScore[] = [];
     for (const p of liberos) {
@@ -105,17 +109,16 @@ export function analyzeLiberoRotation(
         scored.push(phaseScore(p, liberoConfig, receptionConfig, defenseConfig));
     }
 
-    // Moins de 2 libéros → pas de rotation possible.
+    // Fewer than 2 liberos → no rotation possible.
     if (scored.length < 2) {
         const only = scored[0] ?? null;
         return {
             liberos: scored,
-            receptionSpecialist: only,
-            defenseSpecialist:   only,
-            primary:             only,
-            receptionDelta: 0,
-            defenseDelta:   0,
-            specialistsDiffer: false,
+            primary: only,
+            receptionLibero: only,
+            defenseLibero: only,
+            rotationPhase: null,
+            gain: 0,
             verdict: "single",
             note: only
                 ? `Only one libero selected (${only.player.fullName}) — no reception/serve rotation ` +
@@ -124,76 +127,51 @@ export function analyzeLiberoRotation(
         };
     }
 
-    const primary = scored.reduce((a, b) => (b.overallScore   > a.overallScore   ? b : a));
-    const recSpec = scored.reduce((a, b) => (b.receptionScore > a.receptionScore ? b : a));
-    const defSpec = scored.reduce((a, b) => (b.defenseScore   > a.defenseScore   ? b : a));
+    const [a, b] = scored;
+    const recBest = b.receptionScore > a.receptionScore ? b : a;
+    const defBest = b.defenseScore   > a.defenseScore   ? b : a;
 
-    // « L'autre » libéro d'une paire de 2.
-    const otherThan = (s: LiberoPhaseScore) => scored.find((x) => x !== s)!;
-    const receptionDelta = recSpec.receptionScore - otherThan(recSpec).receptionScore;
-    const defenseDelta   = defSpec.defenseScore   - otherThan(defSpec).defenseScore;
-
-    const specialistsDiffer = recSpec.player.fullName !== defSpec.player.fullName;
-
-    let verdict: LiberoRotationVerdict;
-    if (!specialistsDiffer) {
-        verdict = "none";
-    } else if (receptionDelta >= SETTINGS.libero.subMinDelta && defenseDelta >= SETTINGS.libero.subMinDelta) {
-        verdict = "system";
-    } else if (receptionDelta >= SETTINGS.libero.subMinDelta || defenseDelta >= SETTINGS.libero.subMinDelta) {
-        verdict = "situational";
-    } else {
-        verdict = "none";
+    // A libero better in both phases plays the whole match.
+    if (recBest === defBest) {
+        const other = recBest === a ? b : a;
+        return {
+            liberos: scored,
+            primary: recBest,
+            receptionLibero: recBest,
+            defenseLibero: recBest,
+            rotationPhase: null,
+            gain: 0,
+            verdict: "none",
+            note:
+                `${recBest.player.fullName} is better in both reception AND defense — no useful rotation. ` +
+                `${other.player.fullName} stays as backup (injury).`,
+        };
     }
 
-    const rec = (d: number) => `Δ+${d.toFixed(0)}`;
-    let note: string;
-    switch (verdict) {
-        case "system":
-            note =
-                `Clear specialisation: ${recSpec.player.fullName} receives better (${rec(receptionDelta)}) ` +
-                `and ${defSpec.player.fullName} defends better (${rec(defenseDelta)}). ` +
-                `Bring ${recSpec.player.fullName} in for the RECEPTION phase and ` +
-                `${defSpec.player.fullName} for the SERVE (defense) phase.`;
-            break;
-        case "situational":
-            if (receptionDelta >= SETTINGS.libero.subMinDelta) {
-                note =
-                    `Difference mostly in RECEPTION: ${recSpec.player.fullName} is a clearly better ` +
-                    `receiver (${rec(receptionDelta)}). Bring them in when receiving; in defense the gap ` +
-                    `(${rec(defenseDelta)}) is small, keep ${defSpec.player.fullName} otherwise.`;
-            } else {
-                note =
-                    `Difference mostly in DEFENSE: ${defSpec.player.fullName} is a clearly better ` +
-                    `defender (${rec(defenseDelta)}). Bring them in when serving; in reception the gap ` +
-                    `(${rec(receptionDelta)}) is small, keep ${recSpec.player.fullName} otherwise.`;
-            }
-            break;
-        case "none":
-            if (!specialistsDiffer) {
-                note =
-                    `${recSpec.player.fullName} is better in both reception AND defense — no useful rotation. ` +
-                    `${otherThan(recSpec).player.fullName} stays as backup (injury).`;
-            } else {
-                note =
-                    `Negligible gaps (reception ${rec(receptionDelta)}, defense ${rec(defenseDelta)}, ` +
-                    `< ${SETTINGS.libero.subMinDelta} pts) — keep ${primary.player.fullName} for both phases, ` +
-                    `the rotation is not worth it.`;
-            }
-            break;
-        default:
-            note = "";
-    }
+    // Otherwise each has "their" phase: the main libero (best overall) keeps
+    // theirs, the 2nd can only contribute in the other one.
+    const primary = b.overallScore > a.overallScore ? b : a;
+    const second  = primary === a ? b : a;
+    const rotationPhase: LiberoPhase = second === recBest ? "reception" : "defense";
+    const key  = PHASE_SCORE[rotationPhase];
+    const gain = second[key] - primary[key];
+    const rotate = gain >= SETTINGS.libero.subMinDelta;
+
+    const note = rotate
+        ? `Keep ${primary.player.fullName} as starting libero and bring ${second.player.fullName} in ` +
+          `for the ${PHASE_LABEL[rotationPhase]}: Δ+${gain.toFixed(1)} on that phase.`
+        : `${second.player.fullName} is slightly better in the ${PHASE_LABEL[rotationPhase]} ` +
+          `(Δ+${gain.toFixed(1)} < ${SETTINGS.libero.subMinDelta}) — not worth rotating, keep ` +
+          `${primary.player.fullName} for both phases.`;
 
     return {
         liberos: scored,
-        receptionSpecialist: recSpec,
-        defenseSpecialist:   defSpec,
         primary,
-        receptionDelta,
-        defenseDelta,
-        specialistsDiffer,
-        verdict,
+        receptionLibero: rotate && rotationPhase === "reception" ? second : primary,
+        defenseLibero:   rotate && rotationPhase === "defense"   ? second : primary,
+        rotationPhase,
+        gain,
+        verdict: rotate ? "rotate" : "none",
         note,
     };
 }

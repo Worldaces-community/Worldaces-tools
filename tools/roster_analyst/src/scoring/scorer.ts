@@ -12,26 +12,26 @@ import { SETTINGS } from "../config/settings";
 import { idealScore, REDUNDANT_TRAIT_GROUPS } from "../config/roleConfig";
 
 /**
- * Les 18 attributs minuscules = seule base de calcul du score.
- * Les clés MAJUSCULES (ATTACK, SETTING, …) sont une agrégation déterministe de
- * leurs sous-stats minuscules : les pondérer en plus serait du double comptage.
+ * The 18 lowercase attributes = the only basis for computing the score.
+ * UPPERCASE keys (ATTACK, SETTING, …) are a deterministic aggregation of
+ * their lowercase sub-stats: weighting them as well would be double counting.
  */
 const LOWERCASE_STATS = new Set(ALL_STATS);
 
-/** Évite de spammer le même avertissement de poids majuscule à chaque joueur. */
+/** Avoids spamming the same uppercase-weight warning for every player. */
 const warnedUppercaseWeights = new Set<string>();
 
-/** Valeur d'une sous-stat (les clés à espace passent par l'index signature). */
+/** Value of a sub-stat (keys with a space go through the index signature). */
 function statOf(player: Player, stat: string): number {
     return (player as unknown as Record<string, number>)[stat] ?? 0;
 }
 
 /**
- * Applique les paires exclusives (EXCLUSIVE_STAT_PAIRS) à un jeu de poids :
- * quand les deux stats d'une paire sont pondérées, seule celle de plus forte
- * VALEUR chez le joueur est conservée — le joueur bloque avec son meilleur
- * style et attaque au tempo qui lui convient, l'autre stat ne joue pas.
- * À égalité, la première stat de la paire gagne. Mutation en place.
+ * Applies the exclusive pairs (EXCLUSIVE_STAT_PAIRS) to a set of weights:
+ * when both stats of a pair are weighted, only the one with the highest
+ * VALUE for the player is kept — the player blocks with their best
+ * style and attacks at the tempo that suits them, the other stat does not apply.
+ * On a tie, the pair's first stat wins. Mutates in place.
  */
 function applyExclusivePairs(weights: Record<string, number>, player: Player): void {
     for (const [a, b] of EXCLUSIVE_STAT_PAIRS) {
@@ -43,9 +43,9 @@ function applyExclusivePairs(weights: Record<string, number>, player: Player): v
 
 // ─── Scoring ──────────────────────────────────────────────────────────────────
 /**
- * Moyenne de puissance pondérée : Σ(w·stat^p)^(1/p). p=1 → moyenne pondérée
- * classique (comportement actuel). p<1 → concave, pénalise les stats basses
- * plus qu'elle ne récompense les stats hautes → favorise les profils équilibrés.
+ * Weighted power mean: Σ(w·stat^p)^(1/p). p=1 → classic weighted
+ * mean (current behavior). p<1 → concave, penalizes low stats
+ * more than it rewards high stats → favors balanced profiles.
  */
 function weightedPowerMean(
     entries: [string, number][],
@@ -64,8 +64,8 @@ function weightedPowerMean(
 }
 
 /**
- * Cœur du scoring : part stats (18 attributs minuscules, poids normalisés) et
- * part traits (bonus du rôle, redondances supprimées).
+ * Scoring core: stats part (18 lowercase attributes, normalized weights) and
+ * traits part (role bonuses, redundancies removed).
  */
 function computeRawScores(
     player: Player,
@@ -73,13 +73,13 @@ function computeRawScores(
 ): { statScore: number; traitScore: number; signScore: number } {
     let statScore = 0;
 
-    // Le score se calcule UNIQUEMENT sur les 18 attributs minuscules. Les cl\u00E9s
-    // MAJUSCULES \u00E9ventuelles dans statsWeights sont ignor\u00E9es (double comptage).
+    // The score is computed ONLY from the 18 lowercase attributes. Any
+    // UPPERCASE keys in statsWeights are ignored (double counting).
     const lowerEntries = Object.entries(config.statsWeights).filter(
         ([stat]) => LOWERCASE_STATS.has(stat)
     );
 
-    // Garde-fou : signale (une fois) un poids majuscule non nul rest\u00E9 dans les params.
+    // Safety net: reports (once) a non-zero uppercase weight left in the params.
     for (const [stat, w] of Object.entries(config.statsWeights)) {
         if (!LOWERCASE_STATS.has(stat) && w > 0 && !warnedUppercaseWeights.has(stat)) {
             warnedUppercaseWeights.add(stat);
@@ -90,8 +90,8 @@ function computeRawScores(
         }
     }
 
-    // Paires exclusives (read/commit block, power/quick) : seule la stat de plus
-    // forte valeur chez le joueur garde son poids.
+    // Exclusive pairs (read/commit block, power/quick): only the stat with the
+    // highest value for the player keeps its weight.
     const weights: Record<string, number> = Object.fromEntries(lowerEntries);
     applyExclusivePairs(weights, player);
 
@@ -100,8 +100,8 @@ function computeRawScores(
     statScore = weightedPowerMean(kept, player, SETTINGS.balanceExponent);
 
     let traitScore = 0;
-    // Traits redondants (même action, ex. les deux services) : on ne garde que le
-    // meilleur bonus présent, on supprime les autres (cf. REDUNDANT_TRAIT_GROUPS).
+    // Redundant traits (same action, e.g. the two serves): only the
+    // best bonus present is kept, the others are dropped (see REDUNDANT_TRAIT_GROUPS).
     const suppressed = new Set<string>();
     for (const group of REDUNDANT_TRAIT_GROUPS) {
         const owned = group.filter((t) => player.traits.includes(t));
@@ -117,9 +117,9 @@ function computeRawScores(
         traitScore += bonus;
     }
 
-    // Signe : bonus léger = valeur de l'effet du signe pour le rôle (setter : 0,
-    // il n'active pas d'effet de signe). Son ACTIVATION (chimie ≥ 3) dépend des
-    // coéquipiers → gérée par le MILP du 5-1, pas ici.
+    // Sign: light bonus = value of the sign effect for the role (setter: 0,
+    // they do not trigger a sign effect). Its ACTIVATION (chemistry ≥ 3) depends on
+    // teammates → handled by the 5-1 MILP, not here.
     const signScore = player.sign ? (config.signBonuses?.[player.sign] ?? 0) : 0;
 
     return { statScore, traitScore, signScore };
@@ -128,12 +128,12 @@ function computeRawScores(
 /**
  * Score a player for a specific role configuration.
  *
- * Score COURANT pur : stats + traits + signe, normalisé cross-rôle. Ni rareté ni
- * terme de progression (retirés à la demande de l'utilisateur) : le score
- * reflète la performance du jour.
+ * Pure CURRENT score: stats + traits + sign, normalized across roles. Neither rarity nor
+ * progress term (removed at the user's request): the score
+ * reflects today's performance.
  *
- * @param player  Joueur à scorer
- * @param config  Configuration du rôle (poids stats + bonus traits)
+ * @param player  Player to score
+ * @param config  Role configuration (stat weights + trait bonuses)
  */
 export function scorePlayer(
     player: Player,
@@ -142,10 +142,10 @@ export function scorePlayer(
     const { statScore, traitScore, signScore } = computeRawScores(player, config);
     const rawTotal = statScore + traitScore + signScore;
 
-    // Normalisation cross-rôle : on rescale le score par le plafond du rôle
-    // pour que la note plafonne à ~99 quel que soit le rôle → les notes
-    // deviennent comparables entre rôles. Rescale linéaire par rôle :
-    // l'ordre intra-rôle et la domination du MILP sont préservés.
+    // Cross-role normalization: rescale the score by the role's ceiling
+    // so the rating caps at ~99 whatever the role → ratings
+    // become comparable across roles. Linear rescale per role:
+    // intra-role order and MILP domination are preserved.
     const ideal           = idealScore(config) || 1;
     const normalizedScore = (rawTotal / ideal) * 99;
 

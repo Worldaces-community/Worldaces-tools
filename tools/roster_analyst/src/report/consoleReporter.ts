@@ -1,7 +1,7 @@
 /**
  * Console reporter for roster analysis
- * Toute la mise en forme du rapport console (français, sections numérotées
- * dynamiquement, couleurs ANSI sobres — cf. formatters).
+ * All the console report formatting (English, dynamically numbered
+ * sections, sober ANSI colors — see formatters).
  */
 
 import { ScoredPlayer, RoleName, Params, Rarity } from "../types";
@@ -18,14 +18,14 @@ import { ChemistryAnalysis, fmtChem, fmtChemVerdict, fmtOn, fmtSign } from "../l
 import { formatPlayer, createBox, rarityName, padEndAnsi, paint, HR, HR2 } from "./formatters";
 import { ROLE_LABELS } from "../config/constants";
 
-/** Couleur d'un score normalisé 0-99 (échelle commune à tout le rapport). */
+/** Color of a normalized 0-99 score (scale shared by the whole report). */
 function scoreColor(score: number): (s: string) => string {
     if (score >= 65) return paint.green;
     if (score >= 50) return paint.yellow;
     return paint.red;
 }
 
-/** Δ des remplaçants : toujours <= 0 par construction (domination du MILP). */
+/** Substitutes' Δ: always <= 0 by construction (MILP domination). */
 function formatDelta(delta: number): string {
     const rounded = Math.round(delta);
     const label = `Δ${rounded === 0 ? "0" : rounded > 0 ? `+${rounded}` : rounded}`;
@@ -37,13 +37,13 @@ function formatDelta(delta: number): string {
  * Handles all console output for the analysis
  */
 export class ConsoleReporter implements Reporter {
-    /** Compteur de sections — la numérotation suit ce qui est réellement affiché. */
+    /** Section counter — numbering follows what is actually displayed. */
     private sectionCount = 0;
 
-    /** Affiche les formules de score et bonus de traits par rôle (--verbose). */
+    /** Shows the score formulas and trait bonuses per role (--verbose). */
     verbose = false;
 
-    /** Bandeau de section numérotée (═══ N · TITRE ═══). */
+    /** Numbered section banner (═══ N · TITLE ═══). */
     section(title: string): void {
         this.sectionCount += 1;
         console.log("\n" + paint.dim(HR2));
@@ -51,7 +51,7 @@ export class ConsoleReporter implements Reporter {
         console.log(paint.dim(HR2));
     }
 
-    /** Bandeau non numéroté (header, roster…). */
+    /** Unnumbered banner (header, roster…). */
     banner(title: string): void {
         console.log("\n" + paint.dim(HR2));
         console.log(`  ${paint.bold(paint.cyan(title))}`);
@@ -78,7 +78,7 @@ export class ConsoleReporter implements Reporter {
     }
 
     /**
-     * Classements par rôle (section 1)
+     * Role rankings (section 1)
      */
     reportRoleRankings(
         allRankings: Record<RoleName, ScoredPlayer[]>,
@@ -117,8 +117,8 @@ export class ConsoleReporter implements Reporter {
     }
 
     /**
-     * Lineup 5-1 (récap + titulaires + banc + réservistes). Affichage dans l'ordre des positions
-     * terrain (1 = passeur, 2 = Front OH, … 7 = libéro), banc et réserve alignés.
+     * 5-1 lineup (summary + starters + bench + reserves). Displayed in court position
+     * order (1 = setter, 2 = Front OH, … 7 = libero), bench and reserve aligned.
      */
     reportLineup(
         title: string,
@@ -128,8 +128,8 @@ export class ConsoleReporter implements Reporter {
     ): void {
         this.section(title);
 
-        // Récapitulatif saisie en jeu : une ligne par position, les 3 étages côte
-        // à côte (titulaire / remplaçant avec Δ / remplaçant blessure).
+        // In-game entry summary: one line per position, the 3 tiers side
+        // by side (starter / substitute with Δ / injury substitute).
         const recapLines: string[] = [
             paint.bold("  SUMMARY (in-game entry)"),
             paint.bold(`     ${"Position".padEnd(20)} ${"Starter".padEnd(24)} ${"Substitute".padEnd(30)} Injury reserve`),
@@ -147,7 +147,7 @@ export class ConsoleReporter implements Reporter {
         });
         console.log("\n" + createBox(recapLines, 80).join("\n"));
 
-        // Titulaires — numérotés par position terrain (ordre de service).
+        // Starters — numbered by court position (serving order).
         const starterLines: string[] = [];
         lineupOrder.forEach((slot, i) => {
             const pos = `${i + 1}.`;
@@ -165,7 +165,7 @@ export class ConsoleReporter implements Reporter {
         });
         console.log("\n" + createBox([paint.bold("  STARTERS"), ...starterLines], 80).join("\n"));
 
-        // Banc — même ordre de positions que les titulaires.
+        // Bench — same position order as the starters.
         const subLines: string[] = [];
         substitutes.forEach((sub, i) => {
             const pos = `${i + 1}.`;
@@ -186,8 +186,8 @@ export class ConsoleReporter implements Reporter {
         });
         console.log("\n" + createBox([paint.bold("  BENCH"), ...subLines], 80).join("\n"));
 
-        // Réservistes (blessures) : montent au banc quand le titulaire du slot
-        // est blessé (son remplaçant entre alors dans le six de base).
+        // Reserves (injuries): move up to the bench when the slot's starter
+        // is injured (their substitute then enters the starting six).
         const reserveLines: string[] = [
             paint.bold("  INJURY RESERVES"),
         ];
@@ -213,10 +213,10 @@ export class ConsoleReporter implements Reporter {
     }
 
     /**
-     * Rotation du 2ᵉ libéro (substitution réception / service).
-     * Compare nos 2 libéros retenus sur des sous-profils réception vs défense
-     * séparés (sous-stats ET traits différenciés) et indique s'il faut activer
-     * la rotation entre phase de réception et phase de service.
+     * 2nd libero rotation (reception / serve substitution).
+     * Compares our 2 selected liberos on separate reception vs defense
+     * sub-profiles (differentiated sub-stats AND traits) and says whether to enable
+     * the rotation between the reception phase and the serve phase.
      */
     reportSignChemistry(a: ChemistryAnalysis): void {
         if (!a.hasSigns) return;
@@ -250,9 +250,9 @@ export class ConsoleReporter implements Reporter {
             ));
             for (const l of analysis.liberos) {
                 const marks =
-                    (analysis.verdict !== "single" && analysis.receptionSpecialist?.player === l.player
+                    (analysis.verdict !== "single" && analysis.receptionLibero?.player === l.player
                         ? " " + paint.cyan("◄ recep") : "") +
-                    (analysis.verdict !== "single" && analysis.defenseSpecialist?.player === l.player
+                    (analysis.verdict !== "single" && analysis.defenseLibero?.player === l.player
                         ? " " + paint.magenta("◄ def") : "");
                 const tags = [
                     ...l.receptionOnlyTraits.map((t) => `${t} (recep)`),
@@ -269,10 +269,9 @@ export class ConsoleReporter implements Reporter {
         }
 
         const badge = {
-            system:      paint.green("✓ ROTATION ADVISED"),
-            situational: paint.yellow("~ SITUATIONAL ROTATION"),
-            none:        paint.dim("• NO ROTATION"),
-            single:      paint.yellow("⚠ ONLY ONE LIBERO"),
+            rotate: paint.green("✓ ROTATION ADVISED"),
+            none:   paint.dim("• NO ROTATION"),
+            single: paint.yellow("⚠ ONLY ONE LIBERO"),
         }[analysis.verdict];
 
         lines.push("");
@@ -282,7 +281,7 @@ export class ConsoleReporter implements Reporter {
         console.log("\n" + createBox(lines, 80).join("\n"));
     }
 
-    /** Coupe un texte en lignes de largeur <= width (aux espaces), pour les boxes. */
+    /** Wraps text into lines of width <= width (at spaces), for the boxes. */
     private wrapText(text: string, width: number): string[] {
         const words = text.split(/\s+/);
         const out: string[] = [];
@@ -300,7 +299,7 @@ export class ConsoleReporter implements Reporter {
     }
 
     /**
-     * Academy (entrées / sorties) + exclusions liées à la progression.
+     * Academy (in / out) + progress-related exclusions.
      */
     reportAcademyAndProgress(av: AvailabilityResult, academy: AcademyAnalysis): void {
         this.section("ACADEMY & PROGRESSION");
@@ -352,7 +351,7 @@ export class ConsoleReporter implements Reporter {
     }
 
     /**
-     * Points faibles de l'équipe (section 5).
+     * Team weak spots (section 5).
      */
     reportWeaknessAnalysis(analysis: WeaknessAnalysis): void {
         this.section("TEAM WEAK SPOTS (5-1)");
@@ -380,7 +379,7 @@ export class ConsoleReporter implements Reporter {
     }
 
     /**
-     * Filtre de recrutement (rôles + traits à cibler).
+     * Recruitment filter (roles + traits to target).
      */
     reportRecruitmentAnalysis(analysis: RecruitmentAnalysis): void {
         const lines: string[] = [
@@ -412,7 +411,7 @@ export class ConsoleReporter implements Reporter {
     }
 
     /**
-     * Gestion du roster — joueurs à vendre (affiché si > ROSTER_TARGET joueurs).
+     * Roster management — players to sell (shown if > ROSTER_TARGET players).
      */
     reportRosterBalance(result: RosterBalanceResult): void {
         this.section("ROSTER MANAGEMENT — PLAYERS TO SELL");

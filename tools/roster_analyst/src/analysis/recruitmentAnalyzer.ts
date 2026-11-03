@@ -13,7 +13,7 @@ import { Sign } from "../types";
 import { analyzeWeaknesses } from "./weaknessAnalyzer";
 import { SubSlot, Substitute } from "../lineup";
 
-/** Sigles courts par rôle pour les ventilations compactes (OH+7 · SET+3 …). */
+/** Short role abbreviations for compact breakdowns (OH+7 · SET+3 …). */
 export const ROLE_SIGLES: Record<RoleName, string> = {
     setter: "SET",
     outsideHitter: "OH",
@@ -26,11 +26,11 @@ export interface RoleUrgency {
     role: RoleName;
     label: string;
     urgency: number;
-    /** Score normalisé (0-99) du titulaire le plus faible du rôle. */
+    /** Normalized score (0-99) of the role's weakest starter. */
     worstStarterScore: number;
-    /** Chute de niveau titulaire → meilleur remplaçant disponible (points normalisés). */
+    /** Level drop starter → best available substitute (normalized points). */
     benchDelta: number;
-    /** Joueurs éligibles manquants pour aligner titulaires + 1 remplaçant. */
+    /** Eligible players missing to field starters + 1 substitute. */
     shortage: number;
     reason: string;
 }
@@ -53,7 +53,7 @@ export interface TraitUrgency {
 
 export interface SignUrgency {
     sign: Sign;
-    /** Apport estimé (points de score) cumulé sur les 3 rôles ciblés. */
+    /** Estimated contribution (score points) summed over the 3 targeted roles. */
     urgency: number;
     reason: string;
 }
@@ -61,24 +61,24 @@ export interface SignUrgency {
 export interface RecruitmentAnalysis {
     top3Roles: RoleUrgency[];
     top3Traits: TraitUrgency[];
-    /** Vide si le CSV n'a pas de signes. */
+    /** Empty if the CSV has no signs. */
     top3Signs: SignUrgency[];
 }
 
 /**
- * Priorité de recrutement par rôle (règle utilisateur) :
- *   recruter en priorité les rôles qui cumulent le MOINS BON SCORE NORMALISÉ
- *   du titulaire et le PLUS GROS GAP SUR LE BANC (chute titulaire → remplaçant).
+ * Recruitment priority per role (user rule):
+ *   recruit first the roles that combine the WORST NORMALIZED SCORE
+ *   of the starter and the BIGGEST BENCH GAP (drop starter → substitute).
  *
- *   urgence = manque d'effectifs × 1e6            (override absolu : sans assez
- *                                                   de joueurs éligibles, rien
- *                                                   d'autre ne compte)
- *           + (100 − score normalisé du titulaire le plus faible)
- *           + delta de banc
+ *   urgency = headcount shortage × 1e6           (absolute override: without
+ *                                                   enough eligible players,
+ *                                                   nothing else matters)
+ *           + (100 − normalized score of the weakest starter)
+ *           + bench delta
  *
- * Les traits recommandés sont ensuite ceux qui apportent le plus (somme des
- * traitBonuses) aux 3 rôles retenus, atténués s'ils sont déjà couverts dans la
- * lineup (recruter un trait déjà présent 2× n'apporte presque rien).
+ * The recommended traits are then those that contribute most (sum of
+ * traitBonuses) to the 3 selected roles, damped if already covered in the
+ * lineup (recruiting a trait already present 2× adds almost nothing).
  */
 export function analyzeRecruitment(
     starterPlayers: Player[],
@@ -90,7 +90,7 @@ export function analyzeRecruitment(
     roleLabels: Record<RoleName, string>
 ): RecruitmentAnalysis {
 
-    // Delta de banc par rôle = pire chute titulaire → meilleur remplaçant libre.
+    // Bench delta per role = worst drop starter → best free substitute.
     const benchDeltaByRole: Partial<Record<RoleName, number>> = {};
     subSlots.forEach((slotDef, i) => {
         const sub = substitutes[i];
@@ -108,9 +108,9 @@ export function analyzeRecruitment(
         roleLabels
     );
 
-    // Nombre de joueurs titulaires requis par rôle dans le 5-1. On veut au moins
-    // (titulaires + 1 remplaçant) de joueurs éligibles : en dessous, manque
-    // d'effectifs (shortage) = priorité absolue.
+    // Number of starters required per role in the 5-1. We want at least
+    // (starters + 1 substitute) eligible players: below that, headcount
+    // shortage = absolute priority.
     const starterReq: Partial<Record<RoleName, number>> = {
         setter: 1,
         libero: 1,
@@ -123,7 +123,7 @@ export function analyzeRecruitment(
         .map((rw) => {
             const benchDelta = benchDeltaByRole[rw.role] ?? 0;
             const eligibleCount = (allRankings[rw.role] || []).length;
-            const need = (starterReq[rw.role] ?? 1) + 1; // titulaires + 1 remplaçant
+            const need = (starterReq[rw.role] ?? 1) + 1; // starters + 1 substitute
             const shortage = Math.max(0, need - eligibleCount);
             const worstStarterScore = rw.topScore;
 
@@ -166,13 +166,13 @@ export function analyzeRecruitment(
 }
 
 /**
- * 3 signes à recruter : pour chaque signe et chaque rôle ciblé, on remplace
- * le titulaire le plus faible du rôle par une recrue de même score portant ce
- * signe, et on cumule
- *   - le bonus de signe du rôle (normalisé 0-99, cf. scorer) ;
- *   - la variation de synergie des titulaires (unités de chimie gagnées /
- *     perdues × valeur d'une unité : synergie parfaite = 10 % de la somme des
- *     scores des titulaires, comme dans le MILP du 5-1).
+ * 3 signs to recruit: for each sign and each targeted role, replace
+ * the role's weakest starter with a recruit of the same score carrying this
+ * sign, and sum
+ *   - the role's sign bonus (normalized 0-99, see scorer);
+ *   - the change in starters' synergy (chemistry units gained /
+ *     lost × value of one unit: perfect synergy = 10 % of the sum of the
+ *     starters' scores, as in the 5-1 MILP).
  */
 export function selectSigns(
     lineup: Record<string, ScoredPlayer | null>,
@@ -185,7 +185,7 @@ export function selectSigns(
     const unitValue = (SIGN_SYNERGY_MAX_WIN_GAIN * starterSum) / UNITS_PER_PHASE;
     const baseUnits = lineupUnits(lineup);
 
-    // Slot visé par rôle : titulaire le plus faible (slot vide en priorité).
+    // Targeted slot per role: the weakest starter (empty slot first).
     const targetSlot = new Map<RoleName, string>();
     for (const role of focusRoles) {
         const slots = Object.entries(SLOT_ROLE_MAP).filter(([, r]) => r === role).map(([slot]) => slot);
@@ -225,20 +225,20 @@ export function selectSigns(
 }
 
 /**
- * Sélection JOINTE des 3 traits à recruter (MILP, yalps) : on choisit le TRIO
- * qui maximise l'apport cumulé aux 3 rôles ciblés, pas les 3 meilleurs traits
- * pris un par un. La différence : les traits redondants (même action, cf.
- * REDUNDANT_TRAIT_GROUPS — ex. Meteor Serve / Float Serve) ne s'additionnent
- * pas chez un même joueur ; un tri individuel peut donc retenir deux traits
- * dont les apports se recouvrent, alors que le MILP paie ce recouvrement et
- * préfère un trio complémentaire.
+ * JOINT selection of the 3 traits to recruit (MILP, yalps): we pick the TRIO
+ * that maximizes the summed contribution to the 3 targeted roles, not the 3 best traits
+ * taken one by one. The difference: redundant traits (same action, see
+ * REDUNDANT_TRAIT_GROUPS — e.g. Meteor Serve / Float Serve) do not stack
+ * on the same player; an individual sort may thus keep two traits
+ * whose contributions overlap, whereas the MILP pays for that overlap and
+ * prefers a complementary trio.
  *
- * Modèle :
- *   max  Σ_t eff(t)·x_t − Σ_(a,b) redondants  overlap(a,b)·y_ab
- *   s.c. Σ_t x_t = 3 ;  x_a + x_b − y_ab ≤ 1 ;  x, y binaires
- * où eff(t) = Σ_rôles bonus(rôle,t) × facteur de couverture (un trait déjà
- * porté ≥ 2× dans la lineup rapporte moins), et overlap(a,b) = Σ_rôles
- * min(apport de a, apport de b) — la part perdue si un recruté porte les deux.
+ * Model:
+ *   max  Σ_t eff(t)·x_t − Σ_(a,b) redundant  overlap(a,b)·y_ab
+ *   s.t. Σ_t x_t = 3 ;  x_a + x_b − y_ab ≤ 1 ;  x, y binary
+ * where eff(t) = Σ_roles bonus(role,t) × coverage factor (a trait already
+ * held ≥ 2× in the lineup is worth less), and overlap(a,b) = Σ_roles
+ * min(contribution of a, contribution of b) — the share lost if one recruit carries both.
  */
 export function selectTraitTrio(
     starterPlayers: Player[],
@@ -246,14 +246,14 @@ export function selectTraitTrio(
     params: Params,
     starterRoleByName: Map<string, RoleName> = new Map()
 ): TraitUrgency[] {
-    // Un trait déjà bien pourvu (>= 2 porteurs dans la lineup) doit avoir un
-    // bénéfice nettement supérieur pour rester prioritaire face à un absent.
+    // A trait already well covered (>= 2 holders in the lineup) must have a
+    // clearly higher benefit to stay ahead of a missing one.
     const coverFactor = (c: number) => (c === 0 ? 1.0 : c === 1 ? 0.9 : 0.6);
 
     interface TraitInfo {
         trait: string;
-        focusBenefit: number;                       // somme brute des bonus
-        perRoleEff: Partial<Record<RoleName, number>>; // bonus atténué par rôle
+        focusBenefit: number;                       // raw sum of bonuses
+        perRoleEff: Partial<Record<RoleName, number>>; // damped bonus per role
         effective: number;                          // Σ perRoleEff
         reason: string;
         isBanned?: boolean;
@@ -300,7 +300,7 @@ export function selectTraitTrio(
         });
     }
 
-    // MILP : x_t binaire par trait, exactement 3 sélectionnés.
+    // MILP: binary x_t per trait, exactly 3 selected.
     const vars: Record<string, Record<string, number>> = {};
     const cons: Record<string, { equal?: number; max?: number }> = {
         picks: { equal: 3 },
@@ -314,9 +314,9 @@ export function selectTraitTrio(
         }
     }
 
-    // Pénalité de redondance : si deux traits d'un même groupe sont pris
-    // ensemble, un recruté qui porte les deux n'en cumule pas les effets →
-    // on retire le recouvrement (Σ_rôles min des apports atténués).
+    // Redundancy penalty: if two traits of the same group are picked
+    // together, a recruit carrying both does not stack their effects →
+    // subtract the overlap (Σ_roles min of the damped contributions).
     for (const group of REDUNDANT_TRAIT_GROUPS) {
         for (let i = 0; i < group.length; i++) {
             for (let j = i + 1; j < group.length; j++) {
@@ -351,7 +351,7 @@ export function selectTraitTrio(
             (new Map(sol.variables).get(`x_${t}`) ?? 0) > 0.5
         );
     } else {
-        // Fallback (ne devrait pas arriver) : top 3 individuel.
+        // Fallback (should not happen): individual top 3.
         selected = [...infos.values()]
             .filter((t) => !t.isBanned)
             .sort((a, b) => b.effective - a.effective)

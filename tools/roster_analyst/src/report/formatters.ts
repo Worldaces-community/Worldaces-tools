@@ -1,14 +1,14 @@
 /**
- * Console formatting utilities — couleurs ANSI + boxes + format joueur.
+ * Console formatting utilities — ANSI colors + boxes + player format.
  */
 
 import { ScoredPlayer, Rarity } from "../types";
 
-// ─── Couleurs ANSI ────────────────────────────────────────────────────────────
-// Activées seulement sur un vrai terminal (ou FORCE_COLOR=1), désactivées par
-// NO_COLOR — la sortie redirigée vers un fichier reste propre.
+// ─── ANSI colors ──────────────────────────────────────────────────────────────
+// Enabled only on a real terminal (or FORCE_COLOR=1), disabled by
+// NO_COLOR — output redirected to a file stays clean.
 
-// `process` n'existe pas dans le navigateur (bundle web) → pas de couleurs.
+// `process` does not exist in the browser (web bundle) → no colors.
 interface ProcLike { env?: Record<string, string | undefined>; stdout?: { isTTY?: boolean } }
 const proc = (globalThis as { process?: ProcLike }).process;
 const colorsEnabled =
@@ -20,7 +20,7 @@ const colorsEnabled =
 const wrap = (code: string) => (s: string): string =>
     colorsEnabled ? `\x1b[${code}m${s}\x1b[0m` : s;
 
-/** Palette sobre du rapport. */
+/** Sober report palette. */
 export const paint = {
     bold:    wrap("1"),
     dim:     wrap("2"),
@@ -31,24 +31,24 @@ export const paint = {
     cyan:    wrap("36"),
 };
 
-/** Retire les codes ANSI (pour calculer les largeurs d'affichage). */
+/** Strips ANSI codes (to compute display widths). */
 export function stripAnsi(s: string): string {
     // eslint-disable-next-line no-control-regex
     return s.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
-/** Longueur visible (hors codes couleur). */
+/** Visible length (excluding color codes). */
 export function visibleLength(s: string): number {
     return stripAnsi(s).length;
 }
 
-/** padEnd qui ignore les codes couleur dans le calcul de largeur. */
+/** padEnd that ignores color codes when computing the width. */
 export function padEndAnsi(s: string, width: number): string {
     const pad = width - visibleLength(s);
     return pad > 0 ? s + " ".repeat(pad) : s;
 }
 
-// ─── Lignes & boxes ───────────────────────────────────────────────────────────
+// ─── Lines & boxes ────────────────────────────────────────────────────────────
 
 export const HR = "─".repeat(72);  // ─
 export const HR2 = "═".repeat(72); // ═
@@ -61,8 +61,8 @@ const VL = "│"; // │
 const HL = "─"; // ─
 
 /**
- * Encadre des lignes de contenu (largeur auto, codes couleur ignorés dans le
- * calcul de largeur, bordures atténuées).
+ * Frames content lines (auto width, color codes ignored in the
+ * width computation, dimmed borders).
  */
 export function createBox(lines: string[], minWidth: number = 60): string[] {
     const maxWidth = Math.max(...lines.map(visibleLength), minWidth);
@@ -78,7 +78,7 @@ export function createBox(lines: string[], minWidth: number = 60): string[] {
     return result;
 }
 
-// ─── Format joueur ────────────────────────────────────────────────────────────
+// ─── Player format ────────────────────────────────────────────────────────────
 
 const RARITY_ICONS: Record<Rarity, string> = {
     Special:   "❆❆❆❆", // ❆❆❆❆
@@ -96,19 +96,19 @@ const RARITY_COLOR: Record<Rarity, (s: string) => string> = {
     Common:    paint.dim,
 };
 
-/** Icône de rareté colorée (largeur visible fixe = 4). */
+/** Colored rarity icon (fixed visible width = 4). */
 export function rarityIcon(rarity: Rarity): string {
     const icon = RARITY_ICONS[rarity] ?? "    ";
     return (RARITY_COLOR[rarity] ?? ((s: string) => s))(icon);
 }
 
-/** Nom de rareté coloré. */
+/** Colored rarity name. */
 export function rarityName(rarity: Rarity): string {
     return (RARITY_COLOR[rarity] ?? ((s: string) => s))(rarity);
 }
 
 /**
- * Format a scored player for display (ligne de classement).
+ * Format a scored player for display (ranking line).
  */
 export function formatPlayer(s: ScoredPlayer, rank: number): string {
     const p = s.player;

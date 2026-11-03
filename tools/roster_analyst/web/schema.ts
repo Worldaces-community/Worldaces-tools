@@ -1,7 +1,7 @@
 /**
- * Modèle du params.json édité dans le navigateur : template neutre, fusion d'un
- * fichier importé, textes d'aide. Les listes (stats, traits, signes, réglages
- * par défaut) viennent du moteur → une seule source de vérité.
+ * Model of the params.json edited in the browser: neutral template, merge of an
+ * imported file, help texts. The lists (stats, traits, signs, default
+ * settings) come from the engine → a single source of truth.
  */
 
 import { ALL_STATS, ALL_TRAITS } from "../src/config/constants";

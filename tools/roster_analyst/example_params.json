@@ -16,7 +16,14 @@
       "maxAge": 20
     },
     "libero": {
-      "subMinDelta": 5
+      "subMinDelta": 3,
+      "receptionOnlyTraits": [
+        "Guardian"
+      ],
+      "defenseOnlyTraits": [
+        "Defensive Specialist",
+        "Last Resort"
+      ]
     },
     "roster": {
       "target": 32,

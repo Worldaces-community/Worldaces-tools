@@ -1,17 +1,17 @@
 /**
  * Player types for World Aces roster analysis
  */
-// ─── Rareté ──────────────────────────────────────────────────────────────────
+// ─── Rarity ──────────────────────────────────────────────────────────────────
 
 export type Rarity = "Common" | "Rare" | "Legendary" | "Mythic" | "Special";
 
-// ─── Progression (colonne « Progress » du CSV) ──────────────────────────────
-//   Improving              : progresse encore (matchs + entraînement)
-//   Starting to decline    : déclin entamé, stats en baisse chaque saison
-//   Considering retirement : pic de déclin atteint, ne progresse plus du tout
+// ─── Progress (CSV "Progress" column) ────────────────────────────────────────
+//   Improving              : still improving (matches + training)
+//   Starting to decline    : decline started, stats dropping each season
+//   Considering retirement : decline peak reached, no longer improving at all
 export type Progress = "Improving" | "Starting to decline" | "Considering retirement";
 
-// ─── Signe astrologique (colonne « Sign » / « Signe » du CSV) ───────────────
+// ─── Astrological sign (CSV "Sign" / "Signe" column) ────────────────────────
 export type Sign =
     | "Aries" | "Taurus" | "Gemini" | "Cancer" | "Leo" | "Virgo"
     | "Libra" | "Scorpio" | "Sagittarius" | "Capricorn" | "Aquarius" | "Pisces";
@@ -23,11 +23,11 @@ export interface Player {
     age: number;
     rarity: Rarity;
     position: string;
-    /** Progression du joueur (« Improving » si la colonne est absente du CSV). */
+    /** Player's progress ("Improving" if the column is missing from the CSV). */
     progress: Progress;
     roles: string[];
     traits: string[];
-    /** Signe du joueur (null si colonne absente/vide — anciens CSV). */
+    /** Player's sign (null if the column is missing/empty — old CSVs). */
     sign: Sign | null;
     // Composite stats (uppercase in CSV)
     ATTACK: number;
