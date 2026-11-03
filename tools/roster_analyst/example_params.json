@@ -7,7 +7,8 @@
       "subObjectiveWeight": 0.5,
       "reserveObjectiveWeight": 0.25,
       "signSynergy": true,
-      "synergyTimeLimitSec": 300
+      "synergyTimeLimitSec": 300,
+      "perfectSynergyWinPct": 10
     },
     "availability": {
       "declineExceptionalMinGain": 5
