@@ -57,6 +57,7 @@ wrong type is ignored with a warning.
 | `lineup.subObjectiveWeight` / `reserveObjectiveWeight` | λ / λᵣ of the 5-1 MILP (0 < λᵣ < λ < 1) |
 | `lineup.signSynergy` | exact sign-chemistry optimisation |
 | `lineup.synergyTimeLimitSec` | branch & bound time limit |
+| `lineup.perfectSynergyWinPct` | win-chance gain (%) of a perfect sign chemistry (default 10) — weight of chemistry in the lineup objective and sign recruitment |
 | `availability.declineExceptionalMinGain` | minimum gain to keep a "Starting to decline" player |
 | `academy.maxAge` | maximum (inclusive) academy-eligible age |
 | `libero.subMinDelta` | minimum gain (2nd libero's lead in their best phase) to advise the libero rotation |
@@ -64,7 +65,7 @@ wrong type is ignored with a warning.
 | `roster.target` / `roster.targetCounts` | target roster size and max quota per role |
 | `recruitment.singletonTraits` / `singletonPriorityBonus` / `singletonTraitPositions` | "single-carrier" traits in recruitment |
 
-**Game mechanics** constants (sign matrix, activation thresholds, +10 % win chance,
+**Game mechanics** constants (sign matrix, activation thresholds,
 exclusive pairs, redundant traits) stay in the code.
 
 ## Report & modelling rules
@@ -186,7 +187,7 @@ exclusive pairs, redundant traits) stay in the code.
   (Taurus/Leo/Scorpio/Aquarius = energy recovery on a perfect reception/dig;
   Gemini/Virgo/Sagittarius/Pisces = reflexes; Aries/Cancer/Libra/Capricorn = takes every
   contested ball).
-- **Perfect chemistry = +10 % win chance** (`SIGN_SYNERGY_MAX_WIN_GAIN`).
+- **Perfect chemistry = +10 % win chance** by default (`settings.lineup.perfectSynergyWinPct`).
 
 | Sign | Effect (player other than setter/libero) |
 |---|---|
@@ -214,8 +215,8 @@ exclusive pairs, redundant traits) stay in the code.
   connections (OH, OP, MB).
 - **Lineup builder — EXACT solving** (reliable rather than fast). Objective F = Σ starters'
   scores + V·units(starters) + λ·(score + entry chemistry) of substitutes + λᵣ·score of reserves,
-  with V = 10 % × Σ starters' scores of the base MILP / 9 (perfect chemistry = +10 % of the
-  starters' value). Chemistry being quadratic, linearising it in the joint MILP does not finish
+  with V = p % × Σ starters' scores of the base MILP / 9 (perfect chemistry = +p % of the
+  starters' value, p = `settings.lineup.perfectSynergyWinPct`). Chemistry being quadratic, linearising it in the joint MILP does not finish
   (> 2 min without a solution); a local search was tried then **dropped** (no optimality
   guarantee, shown sub-optimal on a real roster). Retained method (`optimizeSignSynergy`):
   1. base MILP without chemistry + local search ⇒ starting solutions;

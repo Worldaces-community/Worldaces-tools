@@ -7,8 +7,8 @@ import { solve } from "yalps";
 import { Player, RoleName, ScoredPlayer, Params } from "../types";
 import { ALL_TRAITS, SETTINGS } from "../config";
 import { REDUNDANT_TRAIT_GROUPS, idealScore } from "../config/roleConfig";
-import { ALL_SIGNS, SIGN_SYNERGY_MAX_WIN_GAIN } from "../config/signs";
-import { lineupUnits, UNITS_PER_PHASE } from "../lineup/signChemistry";
+import { ALL_SIGNS } from "../config/signs";
+import { lineupUnits, perfectSynergyWinGain, UNITS_PER_PHASE } from "../lineup/signChemistry";
 import { Sign } from "../types";
 import { analyzeWeaknesses } from "./weaknessAnalyzer";
 import { SubSlot, Substitute } from "../lineup";
@@ -171,7 +171,7 @@ export function analyzeRecruitment(
  * sign, and sum
  *   - the role's sign bonus (normalized 0-99, see scorer);
  *   - the change in starters' synergy (chemistry units gained /
- *     lost × value of one unit: perfect synergy = 10 % of the sum of the
+ *     lost × value of one unit: perfect synergy = perfectSynergyWinPct % of the sum of the
  *     starters' scores, as in the 5-1 MILP).
  */
 export function selectSigns(
@@ -182,7 +182,7 @@ export function selectSigns(
     if (!Object.values(lineup).some((sp) => sp?.player.sign)) return [];
 
     const starterSum = Object.values(lineup).reduce((s, sp) => s + (sp?.score ?? 0), 0);
-    const unitValue = (SIGN_SYNERGY_MAX_WIN_GAIN * starterSum) / UNITS_PER_PHASE;
+    const unitValue = (perfectSynergyWinGain() * starterSum) / UNITS_PER_PHASE;
     const baseUnits = lineupUnits(lineup);
 
     // Targeted slot per role: the weakest starter (empty slot first).

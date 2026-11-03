@@ -35,8 +35,8 @@
  *
  * Sign synergy (see signChemistry.ts) — EXACT resolution:
  *   F = Σ starters' scores + value of the starters' chemistry (perfect
- *       synergy = +10 % of the sum of the starters' scores ≙ +10 %
- *       win) + λ·(score + entry synergy) of the substitutes
+ *       synergy = +p % of the sum of the starters' scores ≙ +p % win,
+ *       p = settings.lineup.perfectSynergyWinPct) + λ·(score + entry synergy) of the substitutes
  *       + λᵣ·score of the reserves.
  * Chemistry is quadratic (pairs of players): linearized in the MILP,
  * yalps does not terminate. We therefore maximize F by branch & bound over the 7
@@ -56,10 +56,10 @@
 
 import { solve } from "yalps";
 import { ScoredPlayer, RoleName } from "../types";
-import { AFFINITY, NO_SIGN, signIndex, signAffinity, SIGN_SYNERGY_MAX_WIN_GAIN, SIGN_ACTIVATION_THRESHOLD, SETTER_SYNERGY_THRESHOLD } from "../config/signs";
+import { AFFINITY, NO_SIGN, signIndex, signAffinity, SIGN_ACTIVATION_THRESHOLD, SETTER_SYNERGY_THRESHOLD } from "../config/signs";
 import { Sign } from "../types";
 import {
-    courtRoleOf, evaluateCourt, CourtMember, FIVE_ONE_COURTS, UNITS_PER_PHASE,
+    courtRoleOf, evaluateCourt, CourtMember, FIVE_ONE_COURTS, UNITS_PER_PHASE, perfectSynergyWinGain,
 } from "./signChemistry";
 import { maxAssignment } from "./assignment";
 import { SETTINGS, onSettingsChange } from "../config/settings";
@@ -569,7 +569,7 @@ export class LineupBuilder {
     // Objective (the one a single starters + bench + reserve MILP would have):
     //   F(S) = Σ starters' scores + V·U(S) + B(S)
     //   U(S) : starters' chemistry units (average of the 2 phases, ≤ 9)
-    //   V    : value of one unit = 10 % × Σ scores of the base starters / 9
+    //   V    : value of one unit = perfectSynergyWinPct % × Σ scores of the base starters / 9
     //   B(S) : EXACT bench + reserve optimum with starters S fixed (λ·score +
     //          substitute's entry synergy, λᵣ·reserve score, player
     //          uniqueness, substitute ≥ reserve domination).
@@ -604,7 +604,7 @@ export class LineupBuilder {
         const subOf = subSlotDefs.map((d) => slotIdx.get(d.replacesSlot) ?? -1);
 
         const baseTotal = base.starters.reduce((s, sp) => s + (sp?.score ?? 0), 0);
-        const unitValue = (SIGN_SYNERGY_MAX_WIN_GAIN * baseTotal) / UNITS_PER_PHASE;
+        const unitValue = (perfectSynergyWinGain() * baseTotal) / UNITS_PER_PHASE;
 
         // Players (the same player may appear in several role pools).
         const names: string[] = [];

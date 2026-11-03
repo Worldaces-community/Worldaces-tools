@@ -1,5 +1,5 @@
 /**
- * Analysis settings (thresholds, MILP weights, roster quotas…).
+ * Analysis settings (thresholds, MILP weights, synergy value, roster quotas…).
  *
  * Everything that is a user CHOICE lives here and is set in the
  * `settings` block of params.json (see `applySettings`, called by
@@ -29,6 +29,13 @@ export interface Settings {
         signSynergy: boolean;
         /** Safety limit of the synergy branch & bound (seconds). */
         synergyTimeLimitSec: number;
+        /**
+         * Win-chance gain (%) of a PERFECT synergy (all effects active +
+         * all setter-attacker connections). Calibrates the chemistry weight
+         * in the 5-1 objective (this % of the starters' score sum), the
+         * sign recruitment and the "≈ +x % win" display.
+         */
+        perfectSynergyWinPct: number;
     };
 
     availability: {
@@ -88,6 +95,7 @@ export const DEFAULT_SETTINGS: Settings = {
         reserveObjectiveWeight: 0.25,
         signSynergy: true,
         synergyTimeLimitSec: 300,
+        perfectSynergyWinPct: 10,
     },
     availability: {
         declineExceptionalMinGain: 5,
