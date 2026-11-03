@@ -7,10 +7,10 @@ import { ALL_TRAITS } from "../config/constants";
 import { ALL_SIGNS, SIGN_ALIASES } from "../config/signs";
 
 /**
- * Correspondance des en-têtes CSV français (jeu traduit) vers les clés
- * canoniques anglaises utilisées en interne. La casse distingue les stats
- * composites (MAJUSCULES) des sous-stats (minuscules), ex. CONTRE→BLOCK vs
- * contre→block. Les en-têtes anglais restent supportés (passthrough).
+ * Mapping of French CSV headers (translated game) to the canonical
+ * English keys used internally. Case distinguishes composite stats
+ * (UPPERCASE) from sub-stats (lowercase), e.g. CONTRE→BLOCK vs
+ * contre→block. English headers remain supported (passthrough).
  */
 const HEADER_ALIASES: Record<string, string> = {
     "Prénom": "First name",
@@ -20,14 +20,14 @@ const HEADER_ALIASES: Record<string, string> = {
     "Rôles": "Roles",
     "Progression": "Progress",
     "Signe": "Sign",
-    // Stats composites (MAJUSCULES)
+    // Composite stats (UPPERCASE)
     "ATTAQUE": "ATTACK",
     "PASSE": "SETTING",
     "RÉCEPTION": "RECEPTION",
     "SERVICE": "SERVE",
     "CONTRE": "BLOCK",
     "ENDURANCE": "STAMINA",
-    // Sous-stats (minuscules)
+    // Sub-stats (lowercase)
     "passe": "setting",
     "service": "serve",
     "smash": "spike",
@@ -46,14 +46,14 @@ const HEADER_ALIASES: Record<string, string> = {
     "défense": "defense",
     "endurance": "stamina",
     "réflexe": "reflex",
-    // "Position" et "Traits" sont identiques en FR/EN.
+    // "Position" and "Traits" are identical in FR/EN.
 };
 
 /**
- * Correspondance des valeurs de cellules françaises (jeu traduit) vers les
- * valeurs canoniques anglaises attendues par le reste du code. Les en-têtes
- * étant traduits ci-dessus, les valeurs le sont aussi : rôles, traits,
- * raretés et positions. Les valeurs anglaises restent supportées (passthrough).
+ * Mapping of French cell values (translated game) to the
+ * canonical English values expected by the rest of the code. Since the headers
+ * are translated above, so are the values: roles, traits,
+ * rarities and positions. English values remain supported (passthrough).
  */
 const ROLE_ALIASES: Record<string, string> = {
     "Passeur": "Setter",
@@ -73,9 +73,9 @@ const TRAIT_ALIASES: Record<string, string> = {
     "Gardien": "Guardian",
     "Service flottant": "Float Serve",
     "Spécialiste défensif": "Defensive Specialist",
-    // Nouvelle vague de traits — noms FR à confirmer en jeu. Un nom FR non
-    // reconnu déclenche l'avertissement « trait inconnu » ci-dessous plutôt
-    // que d'ignorer silencieusement le bonus.
+    // New wave of traits — FR names to be confirmed in game. An unrecognized
+    // FR name triggers the "unknown trait" warning below rather
+    // than silently ignoring the bonus.
     "Apprenti Rapide": "Quick Learner",
     "Accro à l'Élan": "Momentum Addict",
     "Grande Gueule": "Loudmouth",
@@ -101,11 +101,11 @@ const POSITION_ALIASES: Record<string, string> = {
 };
 
 /**
- * Colonne « Progress » → statut canonique. Libellés EN/FR du jeu
- * (traduction/*.json : declining / consideringRetirement) reconnus par motif ;
- * cellule vide ou colonne absente (anciens CSV) ⇒ « Improving ». Une valeur
- * inconnue est traitée comme « Starting to decline » (non-improving ⇒ exclue
- * sauf joueur exceptionnel) avec un avertissement.
+ * "Progress" column → canonical status. EN/FR game labels
+ * (traduction/*.json: declining / consideringRetirement) recognized by pattern;
+ * empty cell or missing column (old CSVs) ⇒ "Improving". An unknown
+ * value is treated as "Starting to decline" (non-improving ⇒ excluded
+ * unless exceptional player) with a warning.
  */
 const warnedUnknownProgress = new Set<string>();
 function parseProgress(raw: string | undefined): Progress {
@@ -127,8 +127,8 @@ function parseProgress(raw: string | undefined): Progress {
 }
 
 /**
- * Colonne « Sign » / « Signe » → signe canonique. Vide/absente (anciens CSV)
- * ⇒ null (aucune chimie modélisée) ; valeur inconnue ⇒ null + avertissement.
+ * "Sign" / "Signe" column → canonical sign. Empty/missing (old CSVs)
+ * ⇒ null (no chemistry modeled); unknown value ⇒ null + warning.
  */
 const KNOWN_SIGNS = new Set<string>(ALL_SIGNS);
 const warnedUnknownSigns = new Set<string>();
@@ -147,9 +147,9 @@ function parseSign(raw: string | undefined): Sign | null {
 const tr = (map: Record<string, string>, v: string) => map[v] ?? v;
 
 /**
- * Garde-fou : un trait qui n'est pas dans ALL_TRAITS après traduction ne
- * recevra JAMAIS de bonus (les params ne le connaissent pas). On avertit une
- * fois par nom inconnu — typiquement un nom FR absent de TRAIT_ALIASES.
+ * Safety net: a trait that is not in ALL_TRAITS after translation will
+ * NEVER receive a bonus (the params do not know it). We warn once
+ * per unknown name — typically a FR name missing from TRAIT_ALIASES.
  */
 const KNOWN_TRAITS = new Set(ALL_TRAITS);
 const warnedUnknownTraits = new Set<string>();
@@ -163,9 +163,9 @@ function warnIfUnknownTrait(trait: string): void {
 }
 
 /**
- * Parse le CONTENU d'un CSV de joueurs (export du jeu, en-têtes EN ou FR).
- * Gère les champs entre guillemets, le BOM UTF-8, les fins de ligne CRLF et
- * les lignes vides. Pur (pas d'accès disque) : utilisable dans le navigateur.
+ * Parses the CONTENT of a player CSV (game export, EN or FR headers).
+ * Handles quoted fields, the UTF-8 BOM, CRLF line endings and
+ * empty lines. Pure (no disk access): usable in the browser.
  */
 export function parseCSVText(text: string): Player[] {
     const raw = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
@@ -223,8 +223,8 @@ export function parseCSVText(text: string): Player[] {
             fullName: `${row["First name"]} ${row["Last name"]}`,
             age: n("Age"),
             rarity: tr(RARITY_ALIASES, row["Rarity"]),
-            // Academy : toute variante « Acad… » (Académie, Academie, Academy…) — le
-            // libellé FR exact n'a pas encore été vu dans un export.
+            // Academy: any "Acad…" variant (Académie, Academie, Academy…) — the
+            // exact FR label has not been seen in an export yet.
             position: /^acad/i.test((row["Position"] ?? "").trim())
                 ? "Academy"
                 : tr(POSITION_ALIASES, row["Position"]),

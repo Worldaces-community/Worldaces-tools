@@ -1,20 +1,20 @@
 /**
  * Roster balance analysis
  *
- * Sélectionne le meilleur groupe de ROSTER_TARGET joueurs à garder via un MILP
- * à quotas souples (au plus N joueurs par rôle, cf. settings.roster), puis liste les joueurs non
- * retenus comme candidats à la vente.
+ * Selects the best group of ROSTER_TARGET players to keep via a MILP
+ * with soft quotas (at most N players per role, see settings.roster), then lists the players not
+ * kept as sell candidates.
  *
- * Quotas SOUPLES, pas stricts : si un rôle manque d'éligibles (ex. 2 seuls
- * libéros pour 4 slots), le MILP reste faisable — les slots vacants sont
- * réattribués aux meilleurs joueurs restants, tous rôles confondus (« flex »),
- * pour que la liste à vendre soit toujours produite. Les pénuries par rôle
- * sont remontées dans `shortfalls` pour affichage.
+ * SOFT quotas, not strict: if a role lacks eligible players (e.g. only 2
+ * liberos for 4 slots), the MILP stays feasible — vacant slots are
+ * reassigned to the best remaining players, all roles combined ("flex"),
+ * so the sell list is always produced. Per-role shortages
+ * are reported in `shortfalls` for display.
  *
- * Joueurs non-progressants (`forced`) : libérés EN PRIORITÉ, hors MILP — les
- * « Considering retirement » et les « Starting to decline » non exceptionnels
- * (cf. availabilityAnalyzer). Ils sont listés en tête, même si le roster ne
- * dépasse pas ROSTER_TARGET ; le MILP ne départage ensuite que les autres.
+ * Non-improving players (`forced`): released FIRST, outside the MILP — the
+ * "Considering retirement" and non-exceptional "Starting to decline" players
+ * (see availabilityAnalyzer). They are listed first, even if the roster does not
+ * exceed ROSTER_TARGET; the MILP then only decides among the others.
  */
 
 import { solve } from "yalps";
@@ -23,10 +23,10 @@ import { rankForRole } from "../scoring/scorer";
 
 import { SETTINGS } from "../config/settings";
 
-/** Taille de roster visée (réglage `settings.roster.target`). */
+/** Target roster size (setting `settings.roster.target`). */
 export const rosterTarget = (): number => SETTINGS.roster.target;
 
-/** Quota max par rôle (réglage `settings.roster.targetCounts`). */
+/** Max quota per role (setting `settings.roster.targetCounts`). */
 export const targetCounts = (): Record<RoleName, number> => SETTINGS.roster.targetCounts;
 
 const ALL_ROLES: RoleName[] = [
@@ -34,51 +34,51 @@ const ALL_ROLES: RoleName[] = [
 ];
 
 /**
- * Bonus par joueur gardé dans l'objectif du MILP. Très supérieur au score max
- * (~120) pour que le solveur maximise D'ABORD le nombre de joueurs gardés,
- * ENSUITE la somme des scores (sinon il pourrait sacrifier un slot pour
- * affecter un joueur bi-rôle à son meilleur rôle).
+ * Bonus per kept player in the MILP objective. Far above the max score
+ * (~120) so the solver maximizes FIRST the number of kept players,
+ * THEN the sum of scores (otherwise it could sacrifice a slot to
+ * assign a dual-role player to their best role).
  */
 const KEEP_BONUS = 1000;
 
 export interface SellCandidate {
     player:    Player;
-    bestScore: number;   // meilleur score sur tous ses rôles éligibles (pour tri)
+    bestScore: number;   // best score across all their eligible roles (for sorting)
     bestRole:  RoleName | null;
-    /** Motif de libération prioritaire (non-progressant) ; absent pour une vente « quota ». */
+    /** Reason for priority release (non-improving); absent for a "quota" sale. */
     reason?:   string;
 }
 
-/** Joueur à libérer en priorité, quel que soit son score. */
+/** Player to release first, whatever their score. */
 export interface ForcedSale {
     player: Player;
     reason: string;
 }
 
-/** Rôle dont le quota cible n'a pas pu être rempli. */
+/** Role whose target quota could not be filled. */
 export interface RoleShortfall {
     role:     RoleName;
-    kept:     number;   // joueurs effectivement gardés sur ce rôle
-    target:   number;   // quota cible
-    eligible: number;   // joueurs éligibles au rôle dans le roster
+    kept:     number;   // players actually kept in this role
+    target:   number;   // target quota
+    eligible: number;   // players eligible for the role in the roster
 }
 
 export interface RosterBalanceResult {
     totalPlayers:   number;
     toSell:         number;
-    /** Libérations prioritaires (non-progressants) puis ventes quota (bestScore croissant). */
+    /** Priority releases (non-improving) then quota sales (ascending bestScore). */
     sellCandidates: SellCandidate[];
-    /** Nombre de libérations prioritaires (en tête de sellCandidates). */
+    /** Number of priority releases (at the head of sellCandidates). */
     forcedCount:    number;
-    /** Rôles en pénurie (quota non rempli). Vide si la composition cible est atteinte. */
+    /** Roles in shortage (quota not filled). Empty if the target composition is met. */
     shortfalls:     RoleShortfall[];
-    /** Joueurs gardés hors quota (slots des rôles en pénurie réattribués). */
+    /** Players kept outside quotas (reassigned slots of roles in shortage). */
     flexKeeps:      SellCandidate[];
-    /** true si la composition cible est entièrement respectée. */
+    /** true if the target composition is fully met. */
     feasible:       boolean;
 }
 
-/** Meilleur score / rôle d'un joueur sur tous ses rôles éligibles. */
+/** Best score / role of a player across all their eligible roles. */
 function bestOfAllRoles(
     player: Player,
     allRankings: Record<RoleName, ScoredPlayer[]>
@@ -93,8 +93,8 @@ function bestOfAllRoles(
 }
 
 /**
- * Sélectionne les meilleurs joueurs à garder (quotas de rôle souples + slots
- * flex si pénurie) et retourne la liste des joueurs non retenus (à vendre).
+ * Selects the best players to keep (soft role quotas + flex slots
+ * on shortage) and returns the list of players not kept (to sell).
  */
 export function analyzeRosterBalance(
     allPlayers: Player[],
@@ -104,8 +104,8 @@ export function analyzeRosterBalance(
     const forcedNames = new Set(forced.map((f) => f.player.fullName));
     const players = allPlayers.filter((p) => !forcedNames.has(p.fullName));
 
-    // Scores par rôle (même scoring que les rankings du rapport) — sur tout le
-    // roster, pour afficher aussi le meilleur rôle des libérations prioritaires.
+    // Per-role scores (same scoring as the report rankings) — over the whole
+    // roster, to also display the best role of priority releases.
     const allRankings: Record<RoleName, ScoredPlayer[]> = {} as Record<RoleName, ScoredPlayer[]>;
     for (const role of ALL_ROLES) {
         allRankings[role] = rankForRole(players, params.roles[role], role);
@@ -118,11 +118,11 @@ export function analyzeRosterBalance(
         player: f.player, reason: f.reason, ...bestOfAllRoles(f.player, fullRankings),
     }));
 
-    // ── MILP : affectation joueur → rôle sous quotas max ─────────────────────
-    //   - chaque joueur : au plus 1 rôle
-    //   - chaque rôle : au plus TARGET_COUNTS[role] joueurs
-    //   - objectif : KEEP_BONUS·(nb gardés) + Σ scores
-    // Contraintes toutes en `max` → toujours faisable, même en pénurie.
+    // ── MILP: player → role assignment under max quotas ─────────────────────
+    //   - each player: at most 1 role
+    //   - each role: at most TARGET_COUNTS[role] players
+    //   - objective: KEEP_BONUS·(nb kept) + Σ scores
+    // All constraints are `max` → always feasible, even on shortage.
     const vars: Record<string, Record<string, number>> = {};
     const cons: Record<string, { max: number }> = {};
     const varMeta = new Map<string, { name: string; role: RoleName }>();
@@ -150,7 +150,7 @@ export function analyzeRosterBalance(
         binaries:    true,
     });
 
-    // Joueurs gardés par le MILP + comptage par rôle
+    // Players kept by the MILP + count per role
     const keptNames = new Set<string>();
     const keptByRole: Record<RoleName, number> = {
         outsideHitter: 0, middleBlocker: 0, setter: 0,
@@ -166,8 +166,8 @@ export function analyzeRosterBalance(
         }
     }
 
-    // Pénuries : rôles dont le quota n'est pas rempli
-    // (sans objet si tout le monde est gardé : aucune vente « quota »)
+    // Shortages: roles whose quota is not filled
+    // (not applicable if everyone is kept: no "quota" sale)
     const quotaApplies = players.length > rosterTarget();
     const shortfalls: RoleShortfall[] = ALL_ROLES
         .filter(role => quotaApplies && keptByRole[role] < (targetCounts()[role] ?? 0))
@@ -178,7 +178,7 @@ export function analyzeRosterBalance(
             eligible: allRankings[role].length,
         }));
 
-    // ── Slots flex : compléter jusqu'à la cible avec les meilleurs restants ──
+    // ── Flex slots: fill up to the target with the best remaining ───────────
     const targetKeep = Math.min(rosterTarget(), players.length);
     const leftovers: SellCandidate[] = players
         .filter(p => !keptNames.has(p.fullName))

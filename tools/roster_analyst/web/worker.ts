@@ -1,12 +1,12 @@
 /**
- * Web Worker : exécute l'analyse hors du thread de l'interface (le branch &
- * bound de la synergie peut prendre plusieurs secondes par lineup). Les
- * lineups indépendantes sont réparties sur des workers lineupWorker.js (un
- * par cœur) ; sans workers imbriqués, tout tourne ici, séquentiellement.
+ * Web Worker: runs the analysis off the UI thread (the synergy branch &
+ * bound can take several seconds per lineup). The
+ * independent lineups are spread over lineupWorker.js workers (one
+ * per core); without nested workers, everything runs here, sequentially.
  *
- * Entrée  : { csvText, params (objet params.json), verbose, paramsLabel }
- * Sorties : { type: "progress", step } · { type: "log", level, text }
- *           { type: "result", markdown } · { type: "error", message }
+ * Input  : { csvText, params (params.json object), verbose, paramsLabel }
+ * Outputs: { type: "progress", step } · { type: "log", level, text }
+ *          { type: "result", markdown } · { type: "error", message }
  */
 
 import {
@@ -37,7 +37,7 @@ const fmt = (args: unknown[]): string => args.map((a) => (typeof a === "string" 
 console.warn = (...args: unknown[]) => ctx.postMessage({ type: "log", level: "warn", text: fmt(args) });
 console.log = (...args: unknown[]) => ctx.postMessage({ type: "log", level: "info", text: fmt(args) });
 
-/** Exécutants : un worker de lineup par cœur (le thread courant compris). */
+/** Executors: one lineup worker per core (current thread included). */
 function spawnRunners(csvText: string, rawParams: unknown): ((job: number[]) => Promise<SerializedLineup>)[] {
     const n = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 2) - 1));
     return Array.from({ length: n }, () => {

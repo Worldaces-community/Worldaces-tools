@@ -1,17 +1,17 @@
 /**
- * World Aces – 5-1 Roster Analyst : orchestration de l'analyse.
+ * World Aces – 5-1 Roster Analyst: analysis orchestration.
  *
- * Point d'entrée commun à la CLI (`cli.ts`) et à l'application web
- * (`web/worker.ts`) : aucune dépendance Node (fichiers, process…).
+ * Common entry point for the CLI (`cli.ts`) and the web app
+ * (`web/worker.ts`): no Node dependency (files, process…).
  *
- * Rapport (sections numérotées dynamiquement) :
- *   1. Classements par rôle
- *   2. Lineup 5-1 recommandé (titulaires / banc / réservistes, chimie des
- *      signes, rotation réception / service des 2 libéros)
+ * Report (dynamically numbered sections):
+ *   1. Role rankings
+ *   2. Recommended 5-1 lineup (starters / bench / reserves, sign
+ *      chemistry, reception / serve rotation of the 2 liberos)
  *   3. Academy & progression
- *   4. Points faibles + filtre de recrutement
- *   5. Gestion du roster — joueurs à vendre (si roster > cible, ou s'il y a des
- *      non-progressants à libérer en priorité)
+ *   4. Weak spots + recruitment filter
+ *   5. Roster management — players to sell (if roster > target, or if there are
+ *      non-improving players to release first)
  */
 
 import { Player, ScoredPlayer, RoleName, Params } from "./types";
@@ -32,23 +32,23 @@ export { MarkdownReporter, ConsoleReporter } from "./report";
 export type { SerializedLineup } from "./lineup/lineupBuilder";
 
 /**
- * Étapes signalées à `onProgress` (affichage d'avancement dans le web), dans
- * l'ordre du calcul réel :
- *   availability : scores par rôle + lineup avec / sans chaque déclinant
- *   lineup       : 5-1 recommandé + lineup hypothétique de l'Academy
- *   report       : sections du rapport (rapide : lineups en cache)
+ * Steps reported to `onProgress` (progress display in the web app), in
+ * actual computation order:
+ *   availability : per-role scores + lineup with / without each decliner
+ *   lineup       : recommended 5-1 + hypothetical Academy lineup
+ *   report       : report sections (fast: lineups cached)
  */
 export type AnalysisStep = "availability" | "lineup" | "report" | "done";
 
 export interface AnalysisOptions {
-    /** Libellé des params affiché dans l'en-tête du rapport (chemin, nom de fichier…). */
+    /** Params label shown in the report header (path, file name…). */
     paramsLabel?: string;
     onProgress?: (step: AnalysisStep) => void;
 }
 
 /**
- * Lance l'analyse complète et l'envoie à chaque reporter.
- * `params` doit sortir de `normalizeParams` / `parseParams` (réglages activés).
+ * Runs the full analysis and sends it to each reporter.
+ * `params` must come from `normalizeParams` / `parseParams` (settings enabled).
  */
 export function runAnalysis(
     players: Player[],
@@ -59,14 +59,14 @@ export function runAnalysis(
     const progress = options.onProgress ?? (() => undefined);
     const report = (fn: (r: Reporter) => void): void => reporters.forEach(fn);
 
-    // Disponibilité (Academy + progression), puis scores des joueurs
-    // disponibles pour chaque rôle
+    // Availability (Academy + progress), then scores of the available
+    // players for each role
     progress("availability");
     const availability = analyzeAvailability(players, params);
     const allRankings: Record<RoleName, ScoredPlayer[]> = rankAll(availability.pool, params);
 
-    // Lineup 5-1, puis lineup hypothétique de l'Academy (relue en cache par
-    // analyzeAcademy) : les deux calculs coûteux restants.
+    // 5-1 lineup, then hypothetical Academy lineup (read back from cache by
+    // analyzeAcademy): the two remaining expensive computations.
     progress("lineup");
     const lineupBuilder = new LineupBuilder(allRankings);
     const fiveOneResult = lineupBuilder.buildFiveOneLineup();
@@ -80,10 +80,10 @@ export function runAnalysis(
     progress("report");
     report((r) => r.header(players.length, options.paramsLabel ?? "params.json", availability.pool.length));
 
-    // ── Classements par rôle ────────────────────────────────────────────────
+    // ── Role rankings ───────────────────────────────────────────────────────
     report((r) => r.reportRoleRankings(allRankings, ROLE_LABELS, params));
 
-    // ── Lineup 5-1 (+ chimie, rotation réception / service des libéros) ─────
+    // ── 5-1 lineup (+ chemistry, reception / serve libero rotation) ─────────
 
     report((r) => r.reportLineup(
         "RECOMMENDED 5-1 LINEUP",
@@ -113,7 +113,7 @@ export function runAnalysis(
     );
     report((r) => r.reportAcademyAndProgress(availability, academyAnalysis));
 
-    // ── Points faibles + filtre de recrutement ──────────────────────────────
+    // ── Weak spots + recruitment filter ─────────────────────────────────────
     const starterPlayerList = Object.values(fiveOneResult.lineup)
         .filter((x): x is ScoredPlayer => !!x)
         .map((s) => s.player);
@@ -138,7 +138,7 @@ export function runAnalysis(
     );
     report((r) => r.reportRecruitmentAnalysis(recruitmentAnalysis));
 
-    // ── Gestion du roster — joueurs à vendre ────────────────────────────────
+    // ── Roster management — players to sell ────────────────────────────────
     const forcedSales = [
         ...availability.retiring.map((player) => ({
             player, reason: "Considering retirement: no longer improving",
@@ -156,15 +156,15 @@ export function runAnalysis(
     progress("done");
 }
 
-// ─── Calcul parallèle des lineups ────────────────────────────────────────────
+// ─── Parallel lineup computation ─────────────────────────────────────────────
 
 /**
- * Résout des lineups 5-1 hors du thread courant : chaque job = indices (dans
- * `players`) des joueurs du pool, dans l'ordre ; résultats dans le même ordre.
+ * Solves 5-1 lineups off the current thread: each job = indices (in
+ * `players`) of the pool's players, in order; results in the same order.
  */
 export type LineupSolver = (jobs: number[][]) => Promise<SerializedLineup[]>;
 
-/** Répartit les jobs sur des exécutants (un job à la fois chacun). */
+/** Spreads jobs over executors (one job at a time each). */
 export function poolSolver(runners: ((job: number[]) => Promise<SerializedLineup>)[]): LineupSolver {
     return async (jobs) => {
         const out: SerializedLineup[] = new Array(jobs.length);
@@ -179,16 +179,16 @@ export function poolSolver(runners: ((job: number[]) => Promise<SerializedLineup
     };
 }
 
-/** Côté exécutant : lineup 5-1 d'un job (cf. LineupSolver). */
+/** Executor side: 5-1 lineup of one job (see LineupSolver). */
 export function solveLineupJob(players: Player[], params: Params, job: number[]): SerializedLineup {
     return LineupBuilder.solveFiveOne(rankAll(job.map((i) => players[i]), params));
 }
 
 /**
- * `runAnalysis` avec les lineups indépendantes calculées en parallèle par
- * `solve` (base « Improving » + chaque déclinant, puis 5-1 recommandé +
- * lineup de l'Academy), mises en cache avant l'analyse proprement dite.
- * `solve` doit utiliser les mêmes joueurs (même CSV) et params.
+ * `runAnalysis` with the independent lineups computed in parallel by
+ * `solve` ("Improving" base + each decliner, then recommended 5-1 +
+ * Academy lineup), cached before the analysis proper.
+ * `solve` must use the same players (same CSV) and params.
  */
 export async function runAnalysisParallel(
     players: Player[],

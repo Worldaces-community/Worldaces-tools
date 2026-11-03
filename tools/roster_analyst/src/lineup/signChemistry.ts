@@ -1,18 +1,18 @@
 /**
- * Chimie des signes sur le terrain du 5-1 — modèle partagé par le MILP du
- * lineup (LineupBuilder), l'affichage et le recrutement.
+ * Sign chemistry on the 5-1 court — model shared by the lineup MILP
+ * (LineupBuilder), the display and recruitment.
  *
- * Terrain : en 5-1 le libéro remplace le MB de la rangée arrière, les deux MB
- * ne sont donc jamais ensemble sur le terrain. On modélise 2 PHASES de poids
- * égal (½ chacune) :
- *   A : Setter · Front OH · Back OH · Opposite · Front MB · Libéro
- *   B : Setter · Front OH · Back OH · Opposite · Back MB  · Libéro
+ * Court: in a 5-1 the libero replaces the back-row MB, so the two MBs
+ * are never on the court together. We model 2 PHASES of equal
+ * weight (½ each):
+ *   A : Setter · Front OH · Back OH · Opposite · Front MB · Libero
+ *   B : Setter · Front OH · Back OH · Opposite · Back MB  · Libero
  *
- * « Unités » de synergie par phase (9 au maximum) :
- *   - activation du signe de chaque non-passeur (chimie ≥ 3) : 5 ;
- *   - connexion passeur ↔ attaquant (OH, OP, MB) : chimie(passeur) +
- *     chimie(attaquant) ≥ 3 : 4.
- * Synergie parfaite = 9 unités dans les 2 phases ⇒ +10 % de victoire.
+ * Synergy "units" per phase (9 at most):
+ *   - activation of each non-setter's sign (chemistry ≥ 3): 5;
+ *   - setter ↔ attacker connection (OH, OP, MB): chemistry(setter) +
+ *     chemistry(attacker) ≥ 3: 4.
+ * Perfect synergy = 9 units in both phases ⇒ +10 % win.
  */
 
 import { RoleName, Sign, ScoredPlayer } from "../types";
@@ -32,13 +32,13 @@ export function courtRoleOf(role: RoleName): CourtRole {
     return "hitter";
 }
 
-/** Slots titulaires sur le terrain dans chaque phase (cf. en-tête). */
+/** Starter slots on the court in each phase (see header). */
 export const FIVE_ONE_COURTS: string[][] = [
     ["Setter", "Front Outside Hitter", "Back Outside Hitter", "Opposite", "Front Middle Blocker", "Libero"],
     ["Setter", "Front Outside Hitter", "Back Outside Hitter", "Opposite", "Back Middle Blocker", "Libero"],
 ];
 
-/** Rôle de chaque slot titulaire du 5-1. */
+/** Role of each 5-1 starter slot. */
 export const FIVE_ONE_SLOT_ROLES: Record<string, RoleName> = {
     "Setter": "setter",
     "Libero": "libero",
@@ -49,7 +49,7 @@ export const FIVE_ONE_SLOT_ROLES: Record<string, RoleName> = {
     "Opposite": "oppositeHitter",
 };
 
-/** Unités maximales par phase (5 activations + 4 connexions). */
+/** Maximum units per phase (5 activations + 4 connections). */
 export const UNITS_PER_PHASE = 9;
 
 export interface CourtMember {
@@ -61,12 +61,12 @@ export interface CourtMember {
 export interface CourtEval {
     chem: Map<string, number>;
     active: Map<string, boolean>;
-    /** Connexion passeur ↔ attaquant, par clé d'attaquant. */
+    /** Setter ↔ attacker connection, by attacker key. */
     connected: Map<string, boolean>;
     units: number;
 }
 
-/** Évalue une composition de terrain (membres sans joueur exclus en amont). */
+/** Evaluates a court composition (members without a player excluded upstream). */
 export function evaluateCourt(members: CourtMember[]): CourtEval {
     const chem = new Map<string, number>();
     for (const m of members) {
@@ -91,28 +91,28 @@ export function evaluateCourt(members: CourtMember[]): CourtEval {
     return { chem, active, connected, units };
 }
 
-// ─── Analyse de la lineup (affichage + recrutement) ──────────────────────────
+// ─── Lineup analysis (display + recruitment) ─────────────────────────────────
 
 export interface StarterChemistry {
     slot: string;
     sign: Sign | null;
     name: string | null;
-    /** Chimie par phase (null = pas sur le terrain dans cette phase). */
+    /** Chemistry per phase (null = not on the court in this phase). */
     chem: (number | null)[];
-    /** Effet du signe actif par phase (null = hors terrain ou passeur). */
+    /** Sign effect active per phase (null = off the court or setter). */
     active: (boolean | null)[];
-    /** Connexion avec le passeur par phase (attaquants seulement). */
+    /** Connection with the setter per phase (attackers only). */
     connected: (boolean | null)[];
 }
 
 export interface ChemistryAnalysis {
-    /** false ⇒ aucun signe dans le CSV : section non affichée. */
+    /** false ⇒ no sign in the CSV: section not displayed. */
     hasSigns: boolean;
     starters: StarterChemistry[];
-    /** Unités atteintes (moyenne des 2 phases, 0-9). */
+    /** Units reached (average of the 2 phases, 0-9). */
     units: number;
     ratio: number;
-    /** Gain de victoire estimé (ratio × 10 %). */
+    /** Estimated win gain (ratio × 10 %). */
     winGain: number;
 }
 
@@ -128,7 +128,7 @@ function phaseMembers(lineup: Lineup, court: string[]): CourtMember[] {
         }));
 }
 
-/** Unités moyennes (2 phases) d'une lineup de titulaires. */
+/** Average units (2 phases) of a starters lineup. */
 export function lineupUnits(lineup: Lineup): number {
     return FIVE_ONE_COURTS.reduce(
         (s, court) => s + evaluateCourt(phaseMembers(lineup, court)).units / FIVE_ONE_COURTS.length,
@@ -158,15 +158,15 @@ export function analyzeChemistry(lineup: Lineup, order: string[]): ChemistryAnal
     return { hasSigns, starters, units, ratio, winGain: ratio * SIGN_SYNERGY_MAX_WIN_GAIN };
 }
 
-// ─── Mise en forme commune (console + markdown) ──────────────────────────────
+// ─── Shared formatting (console + markdown) ──────────────────────────────────
 
-/** « 3 / 2 » (2 phases) ou « 1 » (MB, une seule phase) ; « — » hors terrain. */
+/** "3 / 2" (2 phases) or "1" (MB, a single phase); "—" off the court. */
 export function fmtChem(values: (number | null)[]): string {
     const v = values.filter((x): x is number => x !== null);
     return v.length ? v.map((x) => (x > 0 ? `+${x}` : `${x}`)).join(" / ") : "—";
 }
 
-/** ✓ (toutes les phases) · ½ (une phase sur deux) · ✗ · — (non applicable). */
+/** ✓ (all phases) · ½ (one phase out of two) · ✗ · — (not applicable). */
 export function fmtOn(values: (boolean | null)[]): string {
     const v = values.filter((x): x is boolean => x !== null);
     if (!v.length) return "—";
@@ -174,13 +174,13 @@ export function fmtOn(values: (boolean | null)[]): string {
     return n === v.length ? "✓" : n === 0 ? "✗" : "½";
 }
 
-/** Signe en FR (+ effet libéro entre parenthèses pour le libéro). */
+/** Sign (+ libero effect in parentheses for the libero). */
 export function fmtSign(s: StarterChemistry): string {
     if (!s.sign) return "—";
     return s.slot === "Libero" ? `${s.sign} (${LIBERO_SIGN_EFFECT[s.sign]})` : s.sign;
 }
 
-/** Verdict résumé : « 5.5/9 · ≈ +6.1 % de victoire ». */
+/** Summary verdict: "5.5/9 · ≈ +6.1 % win". */
 export function fmtChemVerdict(a: ChemistryAnalysis): string {
     return `${a.units.toFixed(1)}/${UNITS_PER_PHASE} · ≈ +${(a.winGain * 100).toFixed(1)} % win chance`;
 }

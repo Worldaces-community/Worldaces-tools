@@ -1,17 +1,17 @@
 /**
- * Disponibilité des joueurs pour la lineup (Academy + progression).
+ * Player availability for the lineup (Academy + progress).
  *
- *   - Position « Academy » : jamais disponible pour la lineup (cf. academyAnalyzer
- *     pour les entrées / sorties recommandées).
- *   - Progress « Considering retirement » : ne progresse plus → exclu sans
- *     exception (le faire jouer prend du temps de jeu aux jeunes qui progressent)
- *     et libéré en priorité.
- *   - Progress « Starting to decline » : exclu SAUF s'il est exceptionnel, c.-à-d.
- *     s'il augmente la valeur des 7 titulaires du 5-1 (somme des scores +
- *     synergie des signes) d'au moins
- *     DECLINE_EXCEPTIONAL_MIN_GAIN par rapport à la meilleure lineup sans lui
- *     (alternatives « Improving » comprises, effets de cascade inclus via le MILP).
- *     Non exceptionnel ⇒ libéré en priorité.
+ *   - Position "Academy": never available for the lineup (see academyAnalyzer
+ *     for the recommended moves in / out).
+ *   - Progress "Considering retirement": no longer improving → excluded without
+ *     exception (playing them takes game time from improving youngsters)
+ *     and released first.
+ *   - Progress "Starting to decline": excluded UNLESS exceptional, i.e.
+ *     if they raise the value of the 7 starters of the 5-1 (sum of scores +
+ *     sign synergy) by at least
+ *     DECLINE_EXCEPTIONAL_MIN_GAIN over the best lineup without them
+ *     ("Improving" alternatives included, cascade effects included via the MILP).
+ *     Not exceptional ⇒ released first.
  */
 
 import { Player, Params, RoleName, ScoredPlayer } from "../types";
@@ -20,7 +20,7 @@ import { LineupBuilder } from "../lineup/lineupBuilder";
 import { ACADEMY_POSITION } from "../config/constants";
 import { SETTINGS } from "../config/settings";
 
-/** Classements par rôle d'un sous-ensemble de joueurs. */
+/** Per-role rankings of a subset of players. */
 export function rankAll(players: Player[], params: Params): Record<RoleName, ScoredPlayer[]> {
     const out = {} as Record<RoleName, ScoredPlayer[]>;
     for (const role of Object.keys(params.roles) as RoleName[]) {
@@ -30,8 +30,8 @@ export function rankAll(players: Player[], params: Params): Record<RoleName, Sco
 }
 
 /**
- * Valeur des titulaires du 5-1 optimal construit sur `players` : somme de
- * leurs scores + valeur de la synergie des signes (points de score).
+ * Value of the starters of the optimal 5-1 built from `players`: sum of
+ * their scores + value of the sign synergy (score points).
  */
 function starterTotal(players: Player[], params: Params): number {
     const res = new LineupBuilder(rankAll(players, params)).buildFiveOneLineup();
@@ -42,20 +42,20 @@ export const isAcademy = (p: Player): boolean => p.position === ACADEMY_POSITION
 
 export interface DecliningEval {
     player: Player;
-    /** Gain sur la somme des scores des 7 titulaires s'il est disponible. */
+    /** Gain on the sum of the 7 starters' scores if they are available. */
     gain:   number;
-    /** true ⇒ exceptionnel : reste disponible pour la lineup et le roster. */
+    /** true ⇒ exceptional: stays available for the lineup and the roster. */
     kept:   boolean;
 }
 
 export interface AvailabilityResult {
-    /** Joueurs disponibles pour la lineup (hors Academy, Improving + déclinants exceptionnels). */
+    /** Players available for the lineup (Academy excluded, Improving + exceptional decliners). */
     pool:      Player[];
-    /** Joueurs à l'Academy (indisponibles pour la lineup). */
+    /** Players in the Academy (unavailable for the lineup). */
     academy:   Player[];
-    /** Joueurs « Starting to decline » (hors Academy), gain décroissant. */
+    /** "Starting to decline" players (Academy excluded), by decreasing gain. */
     declining: DecliningEval[];
-    /** Joueurs « Considering retirement » (hors Academy). */
+    /** "Considering retirement" players (Academy excluded). */
     retiring:  Player[];
 }
 
@@ -70,8 +70,8 @@ function splitActive(players: Player[]) {
 }
 
 /**
- * Joueurs des lineups que `analyzeAvailability` optimise (base « Improving »
- * puis base + chaque déclinant) : indépendantes, calculables en parallèle.
+ * Players of the lineups that `analyzeAvailability` optimizes ("Improving" base,
+ * then base + each decliner): independent, computable in parallel.
  */
 export function availabilityLineupPools(players: Player[]): Player[][] {
     const { improving, decliners } = splitActive(players);
@@ -84,7 +84,7 @@ export function availabilityLineupPools(players: Player[]): Player[][] {
 export function analyzeAvailability(players: Player[], params: Params): AvailabilityResult {
     const { academy, improving, retiring, decliners } = splitActive(players);
 
-    // Chaque déclinant est évalué seul face à la base « Improving ».
+    // Each decliner is evaluated alone against the "Improving" base.
     const base = improving.length > 0 ? starterTotal(improving, params) : 0;
     const declining: DecliningEval[] = decliners
         .map((player) => {

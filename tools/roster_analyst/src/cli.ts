@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * World Aces – 5-1 Roster Analyst (ligne de commande)
+ * World Aces – 5-1 Roster Analyst (command line)
  *
- * Usage :
- *   npm run analyze -- <roster.csv> <params.json> [--verbose] [--md <rapport.md>] [--sequential]
+ * Usage:
+ *   npm run analyze -- <roster.csv> <params.json> [--verbose] [--md <report.md>] [--sequential]
  *
- * Le params.json se crée avec l'éditeur de l'application web (export), ou à
- * partir de example_params.json. --md écrit en plus le rapport en markdown
- * (ex. job summary GitHub Actions). Les lineups indépendantes sont calculées
- * en parallèle (worker_threads, ce même fichier) ; --sequential désactive.
+ * params.json is created with the web app's editor (export), or
+ * from example_params.json. --md also writes the report as markdown
+ * (e.g. GitHub Actions job summary). Independent lineups are computed
+ * in parallel (worker_threads, this same file); --sequential disables it.
  */
 
 import * as fs from "fs";
@@ -28,10 +28,10 @@ function usage(): never {
 
 interface LineupWorkerData { csvText: string; paramsText: string }
 
-/** Exécutants : un worker_thread de lineup par cœur (max 8). */
+/** Executors: one lineup worker_thread per core (max 8). */
 function spawnRunners(data: LineupWorkerData): { runners: ((job: number[]) => Promise<SerializedLineup>)[]; close: () => void } {
     const n = Math.max(1, Math.min(8, os.cpus().length - 1));
-    // Sous ts-node, le worker doit enregistrer ts-node lui-même.
+    // Under ts-node, the worker must register ts-node itself.
     const spawn = (): Worker => __filename.endsWith(".ts")
         ? new Worker(`require("ts-node").register({ transpileOnly: true }); require(${JSON.stringify(__filename)});`,
             { eval: true, workerData: data })
@@ -47,7 +47,7 @@ function spawnRunners(data: LineupWorkerData): { runners: ((job: number[]) => Pr
     return { runners, close: () => workers.forEach((w) => void w.terminate()) };
 }
 
-/** Mode worker : résout les jobs de lineup envoyés par le thread principal. */
+/** Worker mode: solves the lineup jobs sent by the main thread. */
 function workerMain(): void {
     const { csvText, paramsText } = workerData as LineupWorkerData;
     const players = parseCSVText(csvText);

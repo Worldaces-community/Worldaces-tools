@@ -1,7 +1,7 @@
-// Vérification indépendante du lineup builder (synergie des signes) :
-// énumère TOUS les jeux de titulaires d'un sous-roster, résout le banc par MILP
-// et compare l'optimum au branch & bound. Usage :
-//   npx ts-node src/tools/verifyLineup.ts <roster.csv> <params.json> [nbJoueurs=14] [graine=0]
+// Independent check of the lineup builder (sign synergy):
+// enumerates ALL starter sets of a sub-roster, solves the bench by MILP
+// and compares the optimum to the branch & bound. Usage:
+//   npx ts-node src/tools/verifyLineup.ts <roster.csv> <params.json> [nbPlayers=14] [seed=0]
 import { solve } from "yalps";
 import * as fs from "fs";
 import { parseCSVText } from "../models"; import { parseParams } from "../config";

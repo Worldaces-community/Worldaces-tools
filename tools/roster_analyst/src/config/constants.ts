@@ -41,59 +41,22 @@ export const ALL_TRAITS = [
 ];
 
 
-// Paires de sous-stats exclusives : dans une action réelle, une seule des deux
-// joue (un contre est lu OU engagé ; une passe est rapide OU haute — aucun
-// tempo n'est privilégié par rôle, cf. règle utilisateur). Le scorer global ne
-// garde que la stat de plus forte VALEUR chez le joueur — le poids de l'autre
-// est retiré (computeRawScores). Ordre dans la paire = gagnant à égalité :
-// read block (compétence principale du contre) et power (Rapide n'est retenu
-// que si quick > power strict).
+// Exclusive sub-stat pairs: in a real action, only one of the two
+// applies (a block is read OR committed; a set is quick OR high — no
+// tempo is favored per role, see user rule). The global scorer only
+// keeps the stat with the highest VALUE for the player — the other one's weight
+// is removed (computeRawScores). Order in the pair = winner on a tie:
+// read block (the main blocking skill) and power (Quick is only kept
+// if quick > power strictly).
 export const EXCLUSIVE_STAT_PAIRS: [string, string][] = [
     ["read block", "commit block"],
     ["power", "quick"],
 ];
 
-// ─── Rotation du 2ᵉ libéro (substitution réception / service) ─────────────────
-//
-// Le jeu permet de faire entrer/sortir un 2ᵉ libéro selon la PHASE :
-//   - RÉCEPTION : on reçoit le service adverse (platform pass, lecture du service…)
-//   - SERVICE   : on sert, puis on défend l'attaque adverse (dig + passe de secours)
-// On sépare donc le profil libéro en deux sous-profils comparables. Côté stats,
-// SEULES `reception` et `defense` discriminent les deux phases (règle utilisateur) :
-// toutes les autres sous-stats (overhand, bump, awareness, focus, stamina, reflex,
-// setting) sont COMMUNES — elles portent la réception ET le dig, donc dans les deux.
-
-/** Sous-stats communes aux deux phases (tout sauf `reception` et `defense`). */
-const LIBERO_COMMON_SUBSTATS = [
-    "overhand", "bump", "awareness", "focus", "stamina", "reflex", "setting",
-];
-
-/** Sous-stats du profil RÉCEPTION : `reception` (discriminante) + les communes. */
-export const LIBERO_RECEPTION_SUBSTATS = ["reception", ...LIBERO_COMMON_SUBSTATS];
-
-/** Sous-stats du profil DÉFENSE : `defense` (discriminante) + les communes. */
-export const LIBERO_DEFENSE_SUBSTATS = ["defense", ...LIBERO_COMMON_SUBSTATS];
-
-/**
- * Traits n'aidant QUE la réception service pour le libéro. Guardian se déclenche
- * sur « meilleures stats de réception » (prend la réception d'un coéquipier à sa
- * place) → réception pure : il ne joue pas sur le dig. Masqué du profil défense.
- */
-export const LIBERO_RECEPTION_ONLY_TRAITS = ["Guardian"];
-
-/**
- * Traits n'aidant QUE la défense pour le libéro. Defensive Specialist « ne
- * s'applique PAS à la réception service » (dig/contre uniquement) ; Last Resort
- * est le dig de sauvetage propre au poste → défense pure. Masqués du profil
- * réception.
- */
-export const LIBERO_DEFENSE_ONLY_TRAITS = ["Defensive Specialist", "Last Resort"];
-
-
 // ─── Academy & progression ───────────────────────────────────────────────────
 
-/** Valeur canonique de la colonne Position pour un joueur à l'Academy. */
+/** Canonical value of the Position column for an Academy player. */
 export const ACADEMY_POSITION = "Academy";
 
-// Seuils réglables par l'utilisateur (âge Academy, gain d'un déclinant
-// exceptionnel, Δ de rotation libéro…) : cf. settings.ts (bloc `settings`).
+// User-adjustable thresholds (Academy age, gain of an exceptional
+// decliner, libero rotation Δ…): see settings.ts (`settings` block).

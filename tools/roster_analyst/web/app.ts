@@ -236,6 +236,26 @@ function renderAdvanced(): void {
             }));
     }));
 
+    // Phase of each libero trait: both (default), reception only, defense only.
+    const phaseRow = (name: string, help: string | undefined) => {
+        const recKey = "receptionOnlyTraits", defKey = "defenseOnlyTraits";
+        const sel = el("select", { "aria-label": `Phase of ${name}` },
+            el("option", { value: "both" }, "Both phases"),
+            el("option", { value: "reception" }, "Reception only"),
+            el("option", { value: "defense" }, "Defense only"));
+        sel.value = s.libero[recKey].includes(name) ? "reception" : s.libero[defKey].includes(name) ? "defense" : "both";
+        sel.addEventListener("change", () => {
+            s.libero[recKey] = s.libero[recKey].filter((x) => x !== name);
+            s.libero[defKey] = s.libero[defKey].filter((x) => x !== name);
+            if (sel.value === "reception") s.libero[recKey].push(name);
+            if (sel.value === "defense") s.libero[defKey].push(name);
+            changed();
+        });
+        const label = el("span", { class: "pos-trait" }, name);
+        if (help) label.title = help;
+        return el("div", { class: "pos-row" }, label, sel);
+    };
+
     $("advancedControls").replaceChildren(
         sec("5-1 lineup",
             slider({ label: "Bench weight (λ)", min: 0.05, max: 0.95, step: 0.05,
@@ -259,9 +279,14 @@ function renderAdvanced(): void {
                 get: () => s.academy.maxAge, set: (v) => (s.academy.maxAge = v) }),
         ),
         sec("Libero rotation",
-            numberField({ label: "Min. gap to rotate liberos", min: 0, step: 0.5,
-                help: "Score gap (0-99 scale) needed on a phase (reception / defense) to advise swapping liberos between phases.",
+            numberField({ label: "Min. gain to rotate liberos", min: 0, step: 0.5,
+                help: "The best overall libero plays by default. The other one is advised for the phase (reception / defense) where they score better only if their lead there reaches this many points (0-99 scale).",
                 get: () => s.libero.subMinDelta, set: (v) => (s.libero.subMinDelta = v) }),
+        ),
+        el("div", { class: "group" },
+            el("h4", {}, "Libero rotation — reception / defense split"),
+            el("p", { class: "ctl-help" }, "The two liberos are compared on a reception profile and a defense profile, both built from the libero weights and bonuses. Every sub-stat counts in both phases; a trait set to one phase only is dropped from the other profile."),
+            el("div", { class: "grid2" }, ...TRAITS.map((t) => phaseRow(t, TRAIT_HELP[t]))),
         ),
         sec("Roster quotas (players to sell)",
             numberField({ label: "Roster size target", min: 1, step: 1,

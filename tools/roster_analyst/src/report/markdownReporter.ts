@@ -1,16 +1,16 @@
 /**
- * Markdown reporter — même contenu que le rapport console, rendu en markdown
- * GitHub (titres, tableaux, emoji). Destiné au job summary GitHub Actions
- * ($GITHUB_STEP_SUMMARY) : lisible sur mobile là où les boxes ASCII des logs
- * se font rewrapper.
+ * Markdown reporter — same content as the console report, rendered as GitHub
+ * markdown (headings, tables, emoji). Intended for the GitHub Actions job summary
+ * ($GITHUB_STEP_SUMMARY): readable on mobile where the ASCII boxes of the logs
+ * get rewrapped.
  *
- * Navigation par blocs repliables (`<details>`) : chaque section numérotée est
- * un bloc ouvert par défaut mais repliable (titre cliquable), et les sous-blocs
- * (tables détaillées, recrutement…) sont repliés par défaut avec leur
- * verdict résumé dans le titre. Seul le RÉCAPITULATIF du lineup (saisie en jeu)
- * est toujours visible.
+ * Navigation by collapsible blocks (`<details>`): each numbered section is
+ * a block open by default but collapsible (clickable title), and sub-blocks
+ * (detailed tables, recruitment…) are collapsed by default with their
+ * summary verdict in the title. Only the lineup SUMMARY (in-game entry)
+ * is always visible.
  *
- * Usage : npm run a <roster.csv> [params.json] -- --md rapport.md
+ * Usage: npm run a <roster.csv> [params.json] -- --md report.md
  */
 
 import { ScoredPlayer, RoleName, Params, Rarity } from "../types";
@@ -26,7 +26,7 @@ import { Reporter } from "./reporter";
 import { ChemistryAnalysis, fmtChem, fmtChemVerdict, fmtOn, fmtSign } from "../lineup/signChemistry";
 import { ROLE_LABELS } from "../config/constants";
 
-/** Icône compacte de rareté (pas de couleur en markdown). */
+/** Compact rarity icon (no color in markdown). */
 const RARITY_MD: Record<Rarity, string> = {
     Special:   "❆❆❆❆ Special",
     Mythic:    "❆❆❆ Mythic",
@@ -39,7 +39,7 @@ function rarity(r: Rarity): string {
     return RARITY_MD[r] ?? String(r);
 }
 
-/** Pastille de score sur l'échelle commune 0-99. */
+/** Score badge on the shared 0-99 scale. */
 function scoreBadge(score: number): string {
     const icon = score >= 65 ? "🟢" : score >= 50 ? "🟡" : "🔴";
     return `${icon} ${score.toFixed(0)}`;
@@ -55,14 +55,14 @@ export class MarkdownReporter implements Reporter {
 
     private out: string[] = [];
     private sectionCount = 0;
-    /** Section numérotée (details ouvert) en cours — fermée au section() suivant. */
+    /** Current numbered section (open details) — closed by the next section(). */
     private sectionOpen = false;
 
     private push(...lines: string[]): void {
         this.out.push(...lines);
     }
 
-    /** Rapport accumulé, en markdown (la CLI l'écrit dans un fichier). */
+    /** Accumulated report, in markdown (the CLI writes it to a file). */
     toMarkdown(): string {
         this.closeSection();
         return this.out.join("\n") + "\n";
@@ -75,7 +75,7 @@ export class MarkdownReporter implements Reporter {
         }
     }
 
-    /** Section numérotée repliable (titre cliquable), ouverte par défaut. */
+    /** Collapsible numbered section (clickable title), open by default. */
     private section(title: string): void {
         this.closeSection();
         this.sectionCount += 1;
@@ -83,7 +83,7 @@ export class MarkdownReporter implements Reporter {
         this.sectionOpen = true;
     }
 
-    /** Ouvre un sous-bloc replié par défaut ; `badge` résume le verdict dans le titre. */
+    /** Opens a sub-block collapsed by default; `badge` summarizes the verdict in the title. */
     private openBlock(title: string, badge?: string): void {
         const suffix = badge ? ` — ${badge}` : "";
         this.push("", `<details><summary><b>${title}</b>${suffix}</summary>`, "");
@@ -157,8 +157,8 @@ export class MarkdownReporter implements Reporter {
     ): void {
         this.section(title);
 
-        // Récapitulatif saisie en jeu — toujours visible : une ligne par position,
-        // les 3 étages côte à côte.
+        // In-game entry summary — always visible: one line per position,
+        // the 3 tiers side by side.
         this.push("| # | Position | Starter | Substitute | Injury reserve |");
         this.push("|--:|---|---|---|---|");
         lineupOrder.forEach((slot, i) => {
@@ -227,10 +227,9 @@ export class MarkdownReporter implements Reporter {
 
     reportLiberoRotation(analysis: LiberoRotationAnalysis): void {
         const badge = {
-            system:      "✅ rotation advised",
-            situational: "🟡 situational rotation",
-            none:        "no rotation",
-            single:      "⚠️ only one libero",
+            rotate: "✅ rotation advised",
+            none:   "no rotation",
+            single: "⚠️ only one libero",
         }[analysis.verdict];
 
         this.openBlock("Libero — reception / serve rotation (2nd libero)", badge);
@@ -240,8 +239,8 @@ export class MarkdownReporter implements Reporter {
             this.push("|---|--:|--:|--:|---|");
             for (const l of analysis.liberos) {
                 const marks =
-                    (analysis.verdict !== "single" && analysis.receptionSpecialist?.player === l.player ? " ◄ recep" : "") +
-                    (analysis.verdict !== "single" && analysis.defenseSpecialist?.player === l.player ? " ◄ def" : "");
+                    (analysis.verdict !== "single" && analysis.receptionLibero?.player === l.player ? " ◄ recep" : "") +
+                    (analysis.verdict !== "single" && analysis.defenseLibero?.player === l.player ? " ◄ def" : "");
                 const tags = [
                     ...l.receptionOnlyTraits.map((t) => `${t} (recep)`),
                     ...l.defenseOnlyTraits.map((t) => `${t} (def)`),

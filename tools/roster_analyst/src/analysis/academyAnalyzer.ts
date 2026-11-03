@@ -1,19 +1,19 @@
 /**
- * Mouvements Academy (entrées / sorties).
+ * Academy moves (in / out).
  *
- * Règles utilisateur :
- *   - éligible à l'Academy ⇔ âge ≤ ACADEMY_MAX_AGE (20 ans) ;
- *   - un joueur doit SORTIR de l'Academy s'il est assez bon pour le roster,
- *     c.-à-d. titulaire OU remplaçant (banc) du 5-1 ; un réserviste blessure
- *     n'est pas « assez bon » ;
- *   - un joueur de l'Academy de plus de 20 ans doit sortir dans tous les cas.
+ * User rules:
+ *   - eligible for the Academy ⇔ age ≤ ACADEMY_MAX_AGE (20);
+ *   - a player must LEAVE the Academy if they are good enough for the roster,
+ *     i.e. starter OR substitute (bench) of the 5-1; an injury reserve
+ *     is not "good enough";
+ *   - an Academy player older than 20 must leave in any case.
  *
- * Méthode : on reconstruit le 5-1 (MILP) sur les joueurs disponibles + les
- * joueurs de l'Academy encore éligibles (≤ 20 ans), en ignorant donc la
- * position actuelle des jeunes. Tout jeune ≤ 20 ans titulaire / remplaçant de
- * cette lineup hypothétique a sa place dans le roster (sortie d'Academy s'il y
- * est) ; tout jeune ≤ 20 ans hors titulaires / banc (y compris réserviste)
- * gagnerait à aller à l'Academy.
+ * Method: rebuild the 5-1 (MILP) from the available players + the
+ * Academy players still eligible (≤ 20), thereby ignoring the
+ * youngsters' current position. Any youngster ≤ 20 who is a starter / sub in
+ * this hypothetical lineup belongs on the roster (leaves the Academy if
+ * there); any youngster ≤ 20 outside starters / bench (reserves included)
+ * would be better off in the Academy.
  */
 
 import { Player, Params, ScoredPlayer } from "../types";
@@ -23,20 +23,20 @@ import { rankAll, isAcademy } from "./availabilityAnalyzer";
 
 export interface AcademyMove {
     player: Player;
-    /** Slot obtenu dans la lineup hypothétique (« Setter », « Sub Front OH »…), null sinon. */
+    /** Slot obtained in the hypothetical lineup ("Setter", "Sub Front OH"…), null otherwise. */
     slot:   string | null;
     score:  number | null;
-    /** Occupant actuel de ce slot dans la lineup recommandée (section 5-1). */
+    /** Current holder of this slot in the recommended lineup (5-1 section). */
     displaces: string | null;
     reason: string;
 }
 
 export interface AcademyAnalysis {
-    /** Joueurs à faire sortir de l'Academy. */
+    /** Players to bring out of the Academy. */
     out:   AcademyMove[];
-    /** Joueurs à envoyer à l'Academy. */
+    /** Players to send to the Academy. */
     in:    AcademyMove[];
-    /** Joueurs qui restent à l'Academy (meilleur score tous rôles). */
+    /** Players staying in the Academy (best score across all roles). */
     stay:  AcademyMove[];
 }
 
@@ -49,16 +49,16 @@ function bestScore(p: Player, rankings: ReturnType<typeof rankAll>): number | nu
     return best;
 }
 
-/** Joueurs de la lineup hypothétique : disponibles + Academy encore éligible. */
+/** Players of the hypothetical lineup: available + still-eligible Academy. */
 export function academyLineupPlayers(pool: Player[], academy: Player[]): Player[] {
     return [...pool, ...academy.filter((p) => p.age <= SETTINGS.academy.maxAge)];
 }
 
 /**
- * @param pool        joueurs disponibles pour la lineup (hors Academy)
- * @param academy     joueurs actuellement à l'Academy
- * @param lineup      titulaires de la lineup recommandée (section 5-1)
- * @param subs        remplaçants de la lineup recommandée (ordre getFiveOneSubSlots)
+ * @param pool        players available for the lineup (Academy excluded)
+ * @param academy     players currently in the Academy
+ * @param lineup      starters of the recommended lineup (5-1 section)
+ * @param subs        substitutes of the recommended lineup (getFiveOneSubSlots order)
  */
 export function analyzeAcademy(
     pool: Player[],
@@ -69,7 +69,7 @@ export function analyzeAcademy(
 ): AcademyAnalysis {
     const ACADEMY_MAX_AGE = SETTINGS.academy.maxAge;
     const rankings = rankAll(academyLineupPlayers(pool, academy), params);
-    // Scores d'affichage : tout l'Academy (y compris les > 20 ans, hors lineup hypothétique).
+    // Display scores: the whole Academy (including > 20, outside the hypothetical lineup).
     const displayRankings = rankAll([...pool, ...academy], params);
 
     const builder = new LineupBuilder(rankings);
@@ -77,7 +77,7 @@ export function analyzeAcademy(
     const subSlots = LineupBuilder.getFiveOneSubSlots();
     const hypoSubs = builder.getSubstitutes(hypo.lineup, subSlots);
 
-    // Nom → slot occupé dans la lineup hypothétique (titulaires + banc).
+    // Name → slot held in the hypothetical lineup (starters + bench).
     const slotOf = new Map<string, { slot: string; score: number; displaces: string | null }>();
     for (const [slot, sp] of Object.entries(hypo.lineup)) {
         if (sp) slotOf.set(sp.player.fullName, {

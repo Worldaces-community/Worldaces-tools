@@ -1,57 +1,57 @@
 /**
- * Lineup builder — MILP mono-passe (yalps)
+ * Lineup builder — single-pass MILP (yalps)
  *
- * Sélectionne conjointement les 7 titulaires, les 7 remplaçants ET les
- * 7 réservistes (blessures) en un seul programme : titulaires pondérés à
- * plein, remplaçants pondérés par λ (< 1), réservistes par λᵣ (< λ) pour
- * que les meilleurs joueurs titularisent. La sélection globale évite
- * l'écueil du glouton, qui titularise des joueurs polyvalents sur des
- * slots non critiques et vide ainsi les pools du banc.
+ * Jointly selects the 7 starters, the 7 substitutes AND the
+ * 7 reserves (injuries) in a single program: starters weighted at
+ * full, substitutes weighted by λ (< 1), reserves by λᵣ (< λ) so
+ * that the best players start. The global selection avoids
+ * the greedy pitfall, which starts versatile players in
+ * non-critical slots and thereby empties the bench pools.
  *
- * Le réserviste couvre la nouvelle mécanique de BLESSURES du jeu : quand
- * le titulaire d'un slot est blessé, son remplaçant entre dans le six de
- * base et le réserviste prend la place laissée libre sur le banc.
+ * The reserve covers the game's new INJURY mechanic: when
+ * a slot's starter is injured, their substitute enters the starting
+ * six and the reserve takes the spot left free on the bench.
  *
- * Contraintes clés :
- *   - chaque slot titulaire : au plus 1 joueur (rempli dès qu'un candidat
- *     éligible existe — le gain d'objectif est toujours positif — mais pas
- *     `equal 1` : un rôle sans aucun éligible, ou avec moins de candidats
- *     que de slots, laisse le(s) slot(s) restant(s) vide(s) au lieu de
- *     rendre tout le modèle infaisable)
- *   - chaque slot remplaçant / réserviste : au plus 1 joueur (banc
- *     incomplet toléré si le roster est trop petit, plutôt qu'un modèle
- *     infaisable)
- *   - chaque joueur : au plus 1 slot (titulaire, remplaçant OU réserviste)
- *   - domination : pour un rôle donné, tout titulaire >= tout remplaçant
- *     >= tout réserviste (garantit delta <= 0 à chaque étage ; un slot
- *     reste vide si aucun joueur restant n'est à la fois éligible et plus
- *     faible que l'étage supérieur — pas de remplaçant ⇒ pas de réserviste)
+ * Key constraints:
+ *   - each starter slot: at most 1 player (filled as soon as an eligible
+ *     candidate exists — the objective gain is always positive — but not
+ *     `equal 1`: a role with no eligible player, or with fewer candidates
+ *     than slots, leaves the remaining slot(s) empty instead of
+ *     making the whole model infeasible)
+ *   - each substitute / reserve slot: at most 1 player (incomplete
+ *     bench tolerated if the roster is too small, rather than an infeasible
+ *     model)
+ *   - each player: at most 1 slot (starter, substitute OR reserve)
+ *   - domination: for a given role, every starter >= every substitute
+ *     >= every reserve (guarantees delta <= 0 at each tier; a slot
+ *     stays empty if no remaining player is both eligible and
+ *     weaker than the tier above — no substitute ⇒ no reserve)
  *
- * Contraintes tactiques post-MILP (5-1) :
+ * Post-MILP tactical constraints (5-1):
  *   score(Front OH) >= score(Back OH)
- *     → le meilleur OH attaque depuis l'avant
+ *     → the best OH attacks from the front
  *   score(Back MB)  >= score(Front MB)
- *     → le meilleur MB bloque depuis l'arrière (ligne du passeur)
+ *     → the best MB blocks from the back (setter's line)
  *
- * Synergie des signes (cf. signChemistry.ts) — résolution EXACTE :
- *   F = Σ scores titulaires + valeur de la chimie des titulaires (synergie
- *       parfaite = +10 % de la somme des scores des titulaires ≙ +10 % de
- *       victoire) + λ·(score + synergie d'entrée) des remplaçants
- *       + λᵣ·score des réservistes.
- * La chimie est quadratique (paires de joueurs) : linéarisée dans le MILP,
- * yalps ne termine pas. On maximise donc F par branch & bound sur les 7
- * titulaires (bornes valides : affectation optimale par algorithme hongrois +
- * borne de chimie selon les signes encore possibles), le banc et la réserve
- * étant résolus exactement à titulaires fixés (affectation, puis MILP si la
- * domination remplaçant ≥ réserviste n'est pas respectée). La domination
- * titulaire ≥ remplaçant est levée : un joueur écarté pour la chimie peut
- * aller sur le banc (Δ > 0). Vérifié contre une énumération exhaustive.
+ * Sign synergy (see signChemistry.ts) — EXACT resolution:
+ *   F = Σ starters' scores + value of the starters' chemistry (perfect
+ *       synergy = +10 % of the sum of the starters' scores ≙ +10 %
+ *       win) + λ·(score + entry synergy) of the substitutes
+ *       + λᵣ·score of the reserves.
+ * Chemistry is quadratic (pairs of players): linearized in the MILP,
+ * yalps does not terminate. We therefore maximize F by branch & bound over the 7
+ * starters (valid bounds: optimal assignment via the Hungarian algorithm +
+ * chemistry bound from the still-possible signs), the bench and reserve
+ * being solved exactly with fixed starters (assignment, then MILP if the
+ * substitute ≥ reserve domination is not met). The starter ≥ substitute
+ * domination is lifted: a player left out for chemistry can
+ * go to the bench (Δ > 0). Checked against an exhaustive enumeration.
  *
- * Ces contraintes sont appliquées en post-traitement par simple swap :
- * le MILP sélectionne les deux meilleurs joueurs disponibles,
- * puis on les affecte au bon slot selon leur score.
- * Le résultat est identique à un MILP contraint car la sélection
- * des joueurs ne change pas — seule leur affectation au slot change.
+ * These constraints are applied in post-processing by a simple swap:
+ * the MILP selects the two best available players,
+ * then we assign them to the right slot by score.
+ * The result is identical to a constrained MILP because the selection
+ * of players does not change — only their slot assignment changes.
  */
 
 import { solve } from "yalps";
@@ -64,7 +64,7 @@ import {
 import { maxAssignment } from "./assignment";
 import { SETTINGS, onSettingsChange } from "../config/settings";
 
-// ─── Types publics (inchangés) ───────────────────────────────────────────────
+// ─── Public types (unchanged) ────────────────────────────────────────────────
 
 export interface SlotDef {
     slot: string;
@@ -75,8 +75,8 @@ export interface LineupResult {
     lineup: Record<string, ScoredPlayer | null>;
     usedPlayers: Set<string>;
     /**
-     * Valeur (points de score) de la synergie des signes des titulaires :
-     * unités atteintes × valeur d'une unité (0 sans signes / synergie off).
+     * Value (score points) of the starters' sign synergy:
+     * units reached × value of one unit (0 without signs / synergy off).
      */
     synergyValue: number;
 }
@@ -88,9 +88,9 @@ export interface SubSlot {
 }
 
 /**
- * Lineup 5-1 optimisée, par noms de joueurs : transportable entre threads
- * (calcul parallèle dans des workers, cf. analyze.ts), puis réinjectée dans
- * le cache via `LineupBuilder.importFiveOne`.
+ * Optimized 5-1 lineup, by player names: transferable between threads
+ * (parallel computation in workers, see analyze.ts), then fed back into
+ * the cache via `LineupBuilder.importFiveOne`.
  */
 export interface SerializedLineup {
     starters:     (string | null)[];
@@ -105,18 +105,18 @@ export interface Substitute {
     sub: ScoredPlayer | null;
     replaces: string;
     delta: number;
-    /** Réserviste : monte au banc quand le titulaire du slot est blessé. */
+    /** Reserve: moves up to the bench when the slot's starter is injured. */
     reserve: ScoredPlayer | null;
-    /** Écart de score réserviste − remplaçant (<= 0 par domination). */
+    /** Score gap reserve − substitute (<= 0 by domination). */
     reserveDelta: number;
 }
 
-// ─── Contraintes d'ordre tactique ────────────────────────────────────────────
+// ─── Tactical order constraints ──────────────────────────────────────────────
 
 /**
- * Paire de slots dont le score doit être ordonné après résolution du MILP.
- *   higher : slot qui doit recevoir le joueur au score le plus élevé
- *   lower  : slot qui doit recevoir le joueur au score le plus faible
+ * Pair of slots whose scores must be ordered after solving the MILP.
+ *   higher : slot that must get the player with the higher score
+ *   lower  : slot that must get the player with the lower score
  */
 interface OrderConstraint {
     higher: string;
@@ -127,7 +127,7 @@ interface ModelSolution {
     starters:  (ScoredPlayer | null)[];
     subs:      (ScoredPlayer | null)[];
     reserves:  (ScoredPlayer | null)[];
-    /** Valeur de l'objectif (scores pondérés + bonus de synergie du banc). */
+    /** Objective value (weighted scores + bench synergy bonus). */
     objective: number;
 }
 
@@ -138,36 +138,36 @@ export class LineupBuilder {
     private used: Set<string>;
 
     /**
-     * Poids nominal des remplaçants dans l'objectif mono-MILP (0 < λ < 1).
-     * < 1 garantit que les meilleurs joueurs sont titularisés ; > 0 pousse
-     * à fournir le banc le plus fort possible sous la contrainte de domination.
+     * Nominal weight of substitutes in the single-MILP objective (0 < λ < 1).
+     * < 1 guarantees that the best players start; > 0 pushes
+     * to field the strongest possible bench under the domination constraint.
      */
     static get subObjectiveWeight(): number { return SETTINGS.lineup.subObjectiveWeight; }
     static set subObjectiveWeight(v: number) { SETTINGS.lineup.subObjectiveWeight = v; LineupBuilder.cache.clear(); }
 
     /**
-     * Poids des réservistes (blessures) dans l'objectif (0 < λᵣ < λ).
-     * < λ garantit que le banc est servi avant la réserve ; > 0 pousse à
-     * fournir la meilleure réserve possible sous la double domination
-     * titulaire >= remplaçant >= réserviste.
+     * Weight of reserves (injuries) in the objective (0 < λᵣ < λ).
+     * < λ guarantees the bench is filled before the reserve; > 0 pushes to
+     * field the best possible reserve under the double domination
+     * starter >= substitute >= reserve.
      */
     static get reserveObjectiveWeight(): number { return SETTINGS.lineup.reserveObjectiveWeight; }
     static set reserveObjectiveWeight(v: number) { SETTINGS.lineup.reserveObjectiveWeight = v; LineupBuilder.cache.clear(); }
 
-    /** Active l'optimisation de la synergie des signes (si le CSV a des signes). */
+    /** Enables sign synergy optimization (if the CSV has signs). */
     static get signSynergy(): boolean { return SETTINGS.lineup.signSynergy; }
     static set signSynergy(v: boolean) { SETTINGS.lineup.signSynergy = v; }
 
     /**
-     * Garde-fou du branch & bound de la synergie (ms). Au-delà, la meilleure
-     * lineup trouvée est gardée avec un avertissement (optimalité non prouvée).
+     * Safety limit of the synergy branch & bound (ms). Beyond it, the best
+     * lineup found is kept with a warning (optimality not proven).
      */
     static get synergyTimeLimitMs(): number { return SETTINGS.lineup.synergyTimeLimitSec * 1000; }
 
-    /** Résultats déjà optimisés, par contenu des pools (cf. buildOptimalLineup). */
+    /** Already optimized results, keyed by pool contents (see buildOptimalLineup). */
     private static cache = new Map<string, { best: ModelSolution; synergyValue: number }>();
 
-    /** Vide le cache des lineups (à appeler quand les scores ou réglages changent). */
+    /** Clears the lineup cache (call when scores or settings change). */
     static clearCache(): void { LineupBuilder.cache.clear(); }
 
     constructor(allRankings: Record<RoleName, ScoredPlayer[]>) {
@@ -175,7 +175,7 @@ export class LineupBuilder {
         this.used = new Set();
     }
 
-    // ─── API publique (signatures inchangées) ─────────────────────────────────
+    // ─── Public API (signatures unchanged) ────────────────────────────────────
 
     private static readonly FIVE_ONE_STARTERS: SlotDef[] = [
         { slot: "Setter",               role: "setter"         },
@@ -190,9 +190,9 @@ export class LineupBuilder {
     buildFiveOneLineup(): LineupResult {
         const starterDefs = LineupBuilder.FIVE_ONE_STARTERS;
 
-        // Contraintes d'ordre tactique 5-1 :
-        //   Front OH >= Back OH  (meilleur attaquant en avant)
-        //   Back MB  >= Front MB (meilleur bloqueur en arrière, ligne passeur)
+        // 5-1 tactical order constraints:
+        //   Front OH >= Back OH  (best attacker in front)
+        //   Back MB  >= Front MB (best blocker at the back, setter's line)
         const orderConstraints: OrderConstraint[] = [
             { higher: "Front Outside Hitter", lower: "Back Outside Hitter"  },
             { higher: "Back Middle Blocker",  lower: "Front Middle Blocker" },
@@ -229,7 +229,7 @@ export class LineupBuilder {
         return this._greedySubs(lineup, subSlotDefs);
     }
 
-    /** Optimise le 5-1 de `allRankings` (ou le lit en cache) et le sérialise. */
+    /** Optimizes the 5-1 of `allRankings` (or reads it from cache) and serializes it. */
     static solveFiveOne(allRankings: Record<RoleName, ScoredPlayer[]>): SerializedLineup {
         new LineupBuilder(allRankings).buildFiveOneLineup();
         const { key } = LineupBuilder.cacheEntryOf(
@@ -243,8 +243,8 @@ export class LineupBuilder {
     }
 
     /**
-     * Met en cache un 5-1 calculé ailleurs (`solveFiveOne` dans un worker) :
-     * le `buildFiveOneLineup` suivant sur les mêmes classements le relit.
+     * Caches a 5-1 computed elsewhere (`solveFiveOne` in a worker):
+     * the next `buildFiveOneLineup` on the same rankings reads it back.
      */
     static importFiveOne(allRankings: Record<RoleName, ScoredPlayer[]>, s: SerializedLineup): void {
         const subSlotDefs = LineupBuilder.getFiveOneSubSlots();
@@ -262,7 +262,7 @@ export class LineupBuilder {
         });
     }
 
-    /** Pools triés par score desc et clé de cache d'un problème de lineup. */
+    /** Pools sorted by score desc and cache key of a lineup problem. */
     private static cacheEntryOf(
         allRankings: Record<RoleName, ScoredPlayer[]>,
         starterDefs: SlotDef[],
@@ -283,12 +283,12 @@ export class LineupBuilder {
         return { key, pools };
     }
 
-    // ─── Helpers statiques ────────────────────────────────────────────────────
+    // ─── Static helpers ───────────────────────────────────────────────────────
 
-    // Ordre d'affichage = position sur le terrain (ordre de service) :
+    // Display order = position on the court (serving order):
     // 1 Setter · 2 Front OH · 3 Front MB · 4 Opposite · 5 Back OH · 6 Back MB,
-    // puis le Libéro en 7. Les sub-slots suivent le même ordre pour que
-    // titulaires, banc et réservistes s'alignent visuellement.
+    // then the Libero as 7. Sub-slots follow the same order so that
+    // starters, bench and reserves line up visually.
 
     static getFiveOneSubSlots(): SubSlot[] {
         return [
@@ -314,12 +314,12 @@ export class LineupBuilder {
         ];
     }
 
-    // ─── Cœur : MILP mono-passe (titulaires + remplaçants + réservistes) ─────
+    // ─── Core: single-pass MILP (starters + substitutes + reserves) ──────────
 
     private _lastSubs:     Record<string, ScoredPlayer | null> | null = null;
     private _lastReserves: Record<string, ScoredPlayer | null> | null = null;
 
-    /** MILP mono-passe titulaires + remplaçants + réservistes (score pur). */
+    /** Single-pass MILP starters + substitutes + reserves (pure score). */
     private solveModel(
         starterDefs: SlotDef[],
         subSlotDefs: SubSlot[],
@@ -338,21 +338,21 @@ export class LineupBuilder {
 
         const addPlayerCons = (nm: string) => {
             if (!seenPlayer.has(nm)) {
-                cons[`pl_${nm}`] = { max: 1 };   // un joueur = au plus 1 slot
+                cons[`pl_${nm}`] = { max: 1 };   // one player = at most 1 slot
                 seenPlayer.add(nm);
             }
         };
 
-        // Slots : titulaires, remplaçants et réservistes tous à { max: 1 } (pas
-        // `equal: 1`) — un slot titulaire reste vide, sans rendre le modèle
-        // infaisable, si son rôle n'a pas (ou plus) de candidat disponible
-        // (les slots réservistes miroitent les slots remplaçants : un par slot
-        // titulaire, même rôle)
+        // Slots: starters, substitutes and reserves all at { max: 1 } (not
+        // `equal: 1`) — a starter slot stays empty, without making the model
+        // infeasible, if its role has no (or no more) available candidate
+        // (reserve slots mirror substitute slots: one per starter
+        // slot, same role)
         for (let i = 0; i < nS; i++) cons[`sl_${i}`] = { max: 1 };
         for (let j = 0; j < nB; j++) cons[`su_${j}`] = { max: 1 };
         for (let j = 0; j < nB; j++) cons[`re_${j}`] = { max: 1 };
 
-        // Variables titulaires (poids plein)
+        // Starter variables (full weight)
         for (let i = 0; i < nS; i++) {
             for (const sp of starterPools[i]) {
                 const nm = sp.player.fullName;
@@ -365,7 +365,7 @@ export class LineupBuilder {
             }
         }
 
-        // Variables remplaçants (poids λ)
+        // Substitute variables (weight λ)
         for (let j = 0; j < nB; j++) {
             for (const sp of (pools[subSlotDefs[j].role] ?? [])) {
                 const nm = sp.player.fullName;
@@ -378,7 +378,7 @@ export class LineupBuilder {
             }
         }
 
-        // Variables réservistes (poids λᵣ < λ)
+        // Reserve variables (weight λᵣ < λ)
         for (let j = 0; j < nB; j++) {
             for (const sp of (pools[subSlotDefs[j].role] ?? [])) {
                 const nm = sp.player.fullName;
@@ -391,10 +391,10 @@ export class LineupBuilder {
             }
         }
 
-        // Domination : pour un rôle donné, tout titulaire >= tout remplaçant.
-        //   StScore_i - SubScore_j >= 0   (contrainte linéaire, scores constants)
-        // Un slot remplaçant reste vide (SubScore_j = 0) si aucun joueur restant
-        // n'est à la fois éligible et plus faible que les titulaires.
+        // Domination: for a given role, every starter >= every substitute.
+        //   StScore_i - SubScore_j >= 0   (linear constraint, constant scores)
+        // A substitute slot stays empty (SubScore_j = 0) if no remaining player
+        // is both eligible and weaker than the starters.
         for (let i = 0; i < nS; i++) {
             for (let j = 0; j < nB; j++) {
                 if (starterDefs[i].role !== subSlotDefs[j].role) continue;
@@ -411,11 +411,11 @@ export class LineupBuilder {
             }
         }
 
-        // Domination 2ᵉ étage : tout remplaçant >= tout réserviste du même rôle.
+        // 2nd-tier domination: every substitute >= every reserve of the same role.
         //   SubScore_j - ResScore_k >= 0
-        // Un slot remplaçant vide (SubScore_j = 0) force donc le slot réserviste
-        // du même rôle à rester vide lui aussi (pas de remplaçant ⇒ pas de
-        // réserviste), et transitive­ment titulaire >= réserviste.
+        // An empty substitute slot (SubScore_j = 0) thus forces the reserve slot
+        // of the same role to stay empty too (no substitute ⇒ no
+        // reserve), and transitively starter >= reserve.
         for (let j = 0; j < nB; j++) {
             for (let k = 0; k < nB; k++) {
                 if (subSlotDefs[j].role !== subSlotDefs[k].role) continue;
@@ -486,18 +486,18 @@ export class LineupBuilder {
         const nS = starterDefs.length;
         const nB = subSlotDefs.length;
 
-        // Pools triés par score desc (titulaires + remplaçants). Cache : un
-        // même pool est souvent re-optimisé (disponibilité, Academy, lineup
-        // principale) — le branch & bound coûte cher.
+        // Pools sorted by score desc (starters + substitutes). Cache: the
+        // same pool is often re-optimized (availability, Academy, main
+        // lineup) — the branch & bound is expensive.
         const { key: cacheKey, pools } = LineupBuilder.cacheEntryOf(this.allRankings, starterDefs, subSlotDefs);
         let cached = LineupBuilder.cache.get(cacheKey);
         if (!cached) {
-            // 1) MILP sans synergie (sélection par score pur, domination stricte).
+            // 1) MILP without synergy (selection by pure score, strict domination).
             let best = this.solveModel(starterDefs, subSlotDefs, pools);
             let synergyValue = 0;
 
-            // 2) Synergie des signes : branch & bound exact sur les titulaires,
-            //    banc/réserve optimaux à titulaires fixés.
+            // 2) Sign synergy: exact branch & bound over the starters,
+            //    optimal bench/reserve with fixed starters.
             if (LineupBuilder.signSynergy) {
                 ({ best, synergyValue } = this.optimizeSignSynergy(starterDefs, subSlotDefs, pools, best));
             }
@@ -514,11 +514,11 @@ export class LineupBuilder {
             if (sp) used.add(sp.player.fullName);
         }
 
-        // ── Post-traitement : contraintes d'ordre (swap intra-rôle) ───────────
+        // ── Post-processing: order constraints (intra-role swap) ──────────────
         //
-        // Le MILP a sélectionné l'ensemble des joueurs ; on se contente de les
-        // affecter au bon slot selon leur score. Swapper deux titulaires d'un
-        // même rôle ne change pas l'ensemble, donc la domination reste valide.
+        // The MILP has selected the set of players; we only
+        // assign them to the right slot by score. Swapping two starters of the
+        // same role does not change the set, so domination stays valid.
 
         for (const { higher, lower } of orderConstraints) {
             const hiIdx = starterDefs.findIndex(d => d.slot === higher);
@@ -532,8 +532,8 @@ export class LineupBuilder {
             if (hiPlayer.score < loPlayer.score) {
                 starters[hiIdx] = loPlayer;
                 starters[loIdx] = hiPlayer;
-                // Le remplaçant / réserviste suit le titulaire qu'il couvre
-                // (sa synergie d'entrée a été évaluée face aux autres titulaires).
+                // The substitute / reserve follows the starter they cover
+                // (their entry synergy was evaluated against the other starters).
                 const hiJ = subSlotDefs.findIndex(d => d.replacesSlot === higher);
                 const loJ = subSlotDefs.findIndex(d => d.replacesSlot === lower);
                 if (hiJ !== -1 && loJ !== -1) {
@@ -543,7 +543,7 @@ export class LineupBuilder {
             }
         }
 
-        // ── Construire les maps de résultat ───────────────────────────────────
+        // ── Build the result maps ─────────────────────────────────────────────
 
         const lineup: Record<string, ScoredPlayer | null> = {};
         for (let i = 0; i < nS; i++) {
@@ -564,22 +564,22 @@ export class LineupBuilder {
         return { lineup, usedPlayers: new Set(used), synergyValue };
     }
 
-    // ─── Synergie des signes : branch & bound EXACT ───────────────────────────
+    // ─── Sign synergy: EXACT branch & bound ───────────────────────────────────
     //
-    // Objectif (celui qu'aurait un MILP unique titulaires + banc + réserve) :
-    //   F(S) = Σ scores titulaires + V·U(S) + B(S)
-    //   U(S) : unités de chimie des titulaires (moyenne des 2 phases, ≤ 9)
-    //   V    : valeur d'une unité = 10 % × Σ scores des titulaires de base / 9
-    //   B(S) : optimum EXACT banc + réserve à titulaires S fixés (λ·score +
-    //          synergie d'entrée du remplaçant, λᵣ·score réserviste, unicité
-    //          des joueurs, domination remplaçant ≥ réserviste).
-    // La chimie dépend de paires de joueurs (quadratique) : linéarisée dans le
-    // MILP joint, yalps ne termine pas. On énumère donc IMPLICITEMENT tous les
-    // jeux de titulaires par branch & bound avec des bornes supérieures valides
-    // (affectation optimale sans domination pour titulaires restants + banc +
-    // réserve, borne de chimie selon les signes encore possibles) : la lineup
-    // retenue est l'optimum global de F (sauf dépassement de
-    // `synergyTimeLimitMs`, signalé par un avertissement).
+    // Objective (the one a single starters + bench + reserve MILP would have):
+    //   F(S) = Σ starters' scores + V·U(S) + B(S)
+    //   U(S) : starters' chemistry units (average of the 2 phases, ≤ 9)
+    //   V    : value of one unit = 10 % × Σ scores of the base starters / 9
+    //   B(S) : EXACT bench + reserve optimum with starters S fixed (λ·score +
+    //          substitute's entry synergy, λᵣ·reserve score, player
+    //          uniqueness, substitute ≥ reserve domination).
+    // Chemistry depends on pairs of players (quadratic): linearized in the
+    // joint MILP, yalps does not terminate. We therefore IMPLICITLY enumerate all
+    // starter sets by branch & bound with valid upper bounds
+    // (optimal assignment without domination for remaining starters + bench +
+    // reserve, chemistry bound from the still-possible signs): the lineup
+    // kept is the global optimum of F (unless
+    // `synergyTimeLimitMs` is exceeded, reported by a warning).
 
     private optimizeSignSynergy(
         starterDefs: SlotDef[],
@@ -606,7 +606,7 @@ export class LineupBuilder {
         const baseTotal = base.starters.reduce((s, sp) => s + (sp?.score ?? 0), 0);
         const unitValue = (SIGN_SYNERGY_MAX_WIN_GAIN * baseTotal) / UNITS_PER_PHASE;
 
-        // Joueurs (un même joueur peut figurer dans plusieurs pools de rôle).
+        // Players (the same player may appear in several role pools).
         const names: string[] = [];
         const nameIdx = new Map<string, number>();
         const signOfP: (Sign | null)[] = [];
@@ -627,9 +627,9 @@ export class LineupBuilder {
         type Lineup = (ScoredPlayer | null)[];
         const sg = (S: Lineup, i: number) => S[i]?.player.sign ?? null;
 
-        /** Unités de chimie (moyenne des phases) des titulaires S. */
-        // Version numérique (chemin chaud du branch & bound) : sig[i] = index
-        // du signe du titulaire i (NO_SIGN = sans signe, −1 = slot vide).
+        /** Chemistry units (average of the phases) of starters S. */
+        // Numeric version (branch & bound hot path): sig[i] = sign index
+        // of starter i (NO_SIGN = no sign, −1 = empty slot).
         const chemBuf = new Int32Array(nS);
         const unitsOfSigs = (sig: ArrayLike<number>): number => {
             let units = 0;
@@ -653,10 +653,10 @@ export class LineupBuilder {
             return units;
         };
         const sigOf = (S: Lineup) => S.map((sp) => (sp ? signIndex(sp.player.sign) : -1));
-        /** Unités de chimie (moyenne des phases) des titulaires S. */
+        /** Chemistry units (average of the phases) of starters S. */
         const starterUnits = (S: Lineup): number => unitsOfSigs(sigOf(S));
 
-        /** Unités impliquant un remplaçant de signe k entrant au slot j (titulaires S). */
+        /** Units involving a substitute of sign k entering slot j (starters S). */
         const entryUnits = (S: Lineup, j: number, k: Sign): number => {
             const i = subOf[j];
             if (i < 0) return 0;
@@ -698,7 +698,7 @@ export class LineupBuilder {
                 return v;
             };
         };
-        /** Bonus d'entrée maximal d'un slot remplaçant (borne). */
+        /** Maximum entry bonus of a substitute slot (bound). */
         const maxBonus = subSlotDefs.map((d, j) => {
             const i = subOf[j];
             if (i < 0) return 0;
@@ -707,10 +707,10 @@ export class LineupBuilder {
         });
 
         /**
-         * Affectation optimale SANS domination (algorithme hongrois) :
-         * slots titulaires restants (score) + remplaçants (λ·score + bonus) +
-         * réservistes (λᵣ·score), joueurs hors `used`. Borne supérieure ; égale
-         * à B(S) quand la domination est respectée par la solution.
+         * Optimal assignment WITHOUT domination (Hungarian algorithm):
+         * remaining starter slots (score) + substitutes (λ·score + bonus) +
+         * reserves (λᵣ·score), players outside `used`. Upper bound; equal
+         * to B(S) when the solution respects domination.
          */
         const assign = (
             used: Set<number>,
@@ -740,7 +740,7 @@ export class LineupBuilder {
             return { total, at };
         };
 
-        // ── Évaluation exacte d'un jeu de titulaires complet ─────────────────
+        // ── Exact evaluation of a complete starter set ───────────────────────
         let best: ModelSolution = base;
         let bestTotal = -Infinity;
         let bestS: Lineup = base.starters;
@@ -753,7 +753,7 @@ export class LineupBuilder {
             if (starterPart + a.total <= bestTotal + 1e-9) return;
             const subs = subSlotDefs.map((_, j) => a.at("b", j));
             const reserves = subSlotDefs.map((_, j) => a.at("r", j));
-            // Domination remplaçant ≥ réserviste (par rôle, slot vide = 0).
+            // Substitute ≥ reserve domination (per role, empty slot = 0).
             const dominated = subSlotDefs.every((dj, j) => subSlotDefs.every((dk, k) =>
                 dj.role !== dk.role || (subs[j]?.score ?? 0) >= (reserves[k]?.score ?? 0)));
             let sol = { subs, reserves, objective: a.total };
@@ -772,17 +772,17 @@ export class LineupBuilder {
             }
         };
 
-        // ── Incumbent : base + recherche locale (accélère l'élagage) ─────────
+        // ── Incumbent: base + local search (speeds up pruning) ───────────────
         consider(base.starters);
         for (const S of this.localSearch(starterDefs, pools, base.starters,
                 (S) => scoreSum(S) + unitValue * starterUnits(S))) {
             consider(S);
         }
 
-        // ── Branch & bound sur les titulaires ────────────────────────────────
-        // Symétrie : les slots d'un même rôle (2 OH, 2 MB) sont interchangeables
-        // pour F (même présence sur le terrain / phases permutées ; remplaçants
-        // réaffectés par l'optimisation du banc) → indices croissants.
+        // ── Branch & bound over the starters ─────────────────────────────────
+        // Symmetry: slots of the same role (2 OH, 2 MB) are interchangeable
+        // for F (same court presence / swapped phases; substitutes
+        // reassigned by the bench optimization) → increasing indices.
         const cand = starterDefs.map((d) => pools[d.role] ?? []);
         const prevSameRole = starterDefs.map((d, i) =>
             starterDefs.findIndex((e, k) => k < i && e.role === d.role));
@@ -792,8 +792,8 @@ export class LineupBuilder {
         const pick: number[] = new Array(nS).fill(-1);
         const used = new Set<number>();
 
-        // Borne de chimie : un slot non fixé prend, indépendamment pour chaque
-        // relation, le meilleur des signes encore disponibles dans son pool.
+        // Chemistry bound: an unfixed slot takes, independently for each
+        // relation, the best of the signs still available in its pool.
         const synergyBound = (): number => {
             const signsOf: (Sign | null)[][] = starterDefs.map((_, i) => {
                 if (fixed[i]) return S[i] ? [S[i]!.player.sign] : [];
@@ -803,8 +803,8 @@ export class LineupBuilder {
                 }
                 return [...out];
             });
-            // Peu de slots libres : énumération exacte des combinaisons de signes
-            // (unicité des joueurs relâchée ⇒ borne toujours valide).
+            // Few free slots: exact enumeration of sign combinations
+            // (player uniqueness relaxed ⇒ bound always valid).
             const free = starterDefs.map((_, i) => i).filter((i) => !fixed[i] && signsOf[i].length > 0);
             if (free.length <= 2) {
                 let bestU = 0;
@@ -845,11 +845,11 @@ export class LineupBuilder {
             }
             return unitValue * units;
         };
-        // Borne du bonus d'entrée des remplaçants, par slot j et signe k : même
-        // relaxation que synergyBound (meilleur signe possible par relation ;
-        // un slot non fixé peut finir vide ⇒ affinité 0 possible). Bien plus
-        // serrée que maxBonus (toutes les unités atteintes) dès que des
-        // titulaires sont fixés, ce qui élague le B&B bien avant les feuilles.
+        // Bound on the substitutes' entry bonus, per slot j and sign k: same
+        // relaxation as synergyBound (best possible sign per relation;
+        // an unfixed slot may end up empty ⇒ affinity 0 possible). Much
+        // tighter than maxBonus (all units reached) as soon as some
+        // starters are fixed, which prunes the B&B well before the leaves.
         const bonusUb = new Float64Array(nB * 13);
         const maxAff = new Int8Array(nS * 13);
         const hasSign = new Array<boolean>(nS);
@@ -926,9 +926,9 @@ export class LineupBuilder {
             }
             if (i === nS) { consider(S); return; }
             const start = prevSameRole[i] >= 0 ? pick[prevSameRole[i]] + 1 : 0;
-            // Borne sans le candidat (slot i hors affectation) : retirer un
-            // joueur de plus ne peut que la baisser ⇒ partial + score(c) + rest
-            // décroît avec c (tri par score) → arrêt dès qu'elle échoue.
+            // Bound without the candidate (slot i outside the assignment): removing one
+            // more player can only lower it ⇒ partial + score(c) + rest
+            // decreases with c (sorted by score) → stop as soon as it fails.
             const restAssign = assignBound(i + 1);
             const rest = restAssign + synergyBound();
             let any = false;
@@ -939,8 +939,8 @@ export class LineupBuilder {
                 any = true;
                 if (partial + sp.score + rest <= bestTotal + 1e-9) break;
                 used.add(p); S[i] = sp; pick[i] = c; fixed[i] = true;
-                // Borne de chimie (c fixé) d'abord avec l'affectation sans retirer
-                // c (≥ la vraie, peu coûteuse), puis l'affectation exacte.
+                // Chemistry bound (c fixed) first with the assignment without removing
+                // c (≥ the true one, cheap), then the exact assignment.
                 const syn = synergyBound();
                 if (partial + sp.score + restAssign + syn > bestTotal + 1e-9 &&
                     partial + sp.score + assignBound(i + 1) + syn > bestTotal + 1e-9) {
@@ -948,8 +948,8 @@ export class LineupBuilder {
                 }
                 used.delete(p); S[i] = null; pick[i] = -1; fixed[i] = false;
             }
-            // Slot laissé vide uniquement s'il n'y a plus aucun éligible (même
-            // règle que le MILP de base : un slot jouable est toujours rempli).
+            // Slot left empty only if there is no eligible player left (same
+            // rule as the base MILP: a playable slot is always filled).
             if (!any) {
                 pick[i] = cand[i].length; fixed[i] = true;
                 dfs(i + 1, partial);
@@ -968,8 +968,8 @@ export class LineupBuilder {
     }
 
     /**
-     * Recherche locale (remplacements simples et doubles) : fournit de bons
-     * jeux de titulaires de départ au branch & bound (élagage plus rapide).
+     * Local search (single and double replacements): provides good
+     * starting starter sets to the branch & bound (faster pruning).
      */
     private localSearch(
         starterDefs: SlotDef[],
@@ -1009,21 +1009,21 @@ export class LineupBuilder {
     }
 
     /**
-     * Optimum EXACT banc + réserve à titulaires FIXÉS. Objectif : λ·score +
-     * bonus de synergie d'entrée (remplaçants) + λᵣ·score (réservistes) ;
-     * domination remplaçant ≥ réserviste par rôle (slot remplaçant vide ⇒ pas
-     * de réserviste). Pas de domination titulaire ≥ remplaçant : les
-     * titulaires sont choisis par l'objectif global (chimie comprise), un
-     * joueur écarté pour la chimie peut aller sur le banc (Δ > 0).
+     * EXACT bench + reserve optimum with FIXED starters. Objective: λ·score +
+     * entry synergy bonus (substitutes) + λᵣ·score (reserves);
+     * substitute ≥ reserve domination per role (empty substitute slot ⇒ no
+     * reserve). No starter ≥ substitute domination: the
+     * starters are chosen by the global objective (chemistry included), a
+     * player left out for chemistry can go to the bench (Δ > 0).
      *
-     * La domination d'un rôle r équivaut à un seuil t_r : remplaçants ≥ t_r ≥
-     * réservistes. Branch & bound sur des intervalles [lo, hi] de seuils :
-     * relaxation = affectation (hongrois) avec remplaçants ≥ lo (et remplis si
-     * lo > 0) et réservistes ≤ hi ; en cas de violation (min remplaçant s <
-     * max réserviste v), on coupe en m = (s + v) / 2 : t ≤ m (réservistes ≤ m)
-     * ou t ≥ m (remplaçants ≥ m), les deux excluant la solution courante.
-     * (Le MILP yalps équivalent pouvait prendre plusieurs minutes par appel
-     * quand les scores sont proches.)
+     * The domination of a role r is equivalent to a threshold t_r: substitutes ≥ t_r ≥
+     * reserves. Branch & bound over threshold intervals [lo, hi]:
+     * relaxation = assignment (Hungarian) with substitutes ≥ lo (and filled if
+     * lo > 0) and reserves ≤ hi; on violation (min substitute s <
+     * max reserve v), split at m = (s + v) / 2: t ≤ m (reserves ≤ m)
+     * or t ≥ m (substitutes ≥ m), both excluding the current solution.
+     * (The equivalent yalps MILP could take several minutes per call
+     * when scores are close.)
      */
     private solveBench(
         subSlotDefs: SubSlot[],
@@ -1042,7 +1042,7 @@ export class LineupBuilder {
             if (!colIdx.has(sp.player.fullName)) colIdx.set(sp.player.fullName, colIdx.size);
         }
         const nC = colIdx.size;
-        // Joueur de la colonne c au slot j (null si inéligible au rôle).
+        // Player of column c in slot j (null if ineligible for the role).
         const at = free.map((list) => {
             const row: (ScoredPlayer | null)[] = new Array(nC).fill(null);
             for (const sp of list) row[colIdx.get(sp.player.fullName)!] = sp;
@@ -1076,7 +1076,7 @@ export class LineupBuilder {
             const subs     = subSlotDefs.map((_, j) => (colOf[j] >= 0 ? at[j][colOf[j]] : null));
             const reserves = subSlotDefs.map((_, k) => (colOf[nB + k] >= 0 ? at[k][colOf[nB + k]] : null));
 
-            // Rôle le plus en violation de la domination (remplaçant vide = 0).
+            // Role most violating domination (empty substitute = 0).
             let worst = -1, cut = 0, gap = 1e-9;
             roles.forEach((_, r) => {
                 let sMin = Infinity, vMax = -Infinity;
@@ -1096,7 +1096,7 @@ export class LineupBuilder {
     }
 
 
-    // ─── Fallback glouton (rétro-compatibilité getSubstitutes standalone) ────
+    // ─── Greedy fallback (backward compatibility of standalone getSubstitutes) ─
 
     private _greedySubs(
         lineup:      Record<string, ScoredPlayer | null>,
@@ -1104,8 +1104,8 @@ export class LineupBuilder {
     ): Substitute[] {
         const usedForSubs = new Set(this.used);
 
-        // 1ʳᵉ passe : les remplaçants (le banc est servi avant la réserve,
-        // comme la domination du MILP l'impose).
+        // 1st pass: substitutes (the bench is filled before the reserve,
+        // as the MILP domination requires).
         const substitutes: Substitute[] = [];
         for (const { label, role, replacesSlot } of subSlotDefs) {
             const ranked  = this.allRankings[role] ?? [];
@@ -1119,8 +1119,8 @@ export class LineupBuilder {
             });
         }
 
-        // 2ᵉ passe : les réservistes (blessures) — pas de remplaçant ⇒ pas de
-        // réserviste, cohérent avec le MILP.
+        // 2nd pass: reserves (injuries) — no substitute ⇒ no
+        // reserve, consistent with the MILP.
         substitutes.forEach((entry, j) => {
             if (!entry.sub) return;
             const ranked  = this.allRankings[subSlotDefs[j].role] ?? [];
@@ -1135,5 +1135,5 @@ export class LineupBuilder {
         return substitutes;
     }
 }
-// Changement de réglages (λ, synergie…) ⇒ les lineups en cache sont caduques.
+// Settings change (λ, synergy…) ⇒ cached lineups are stale.
 onSettingsChange.push(() => LineupBuilder.clearCache());

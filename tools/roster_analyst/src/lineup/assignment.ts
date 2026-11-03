@@ -1,10 +1,10 @@
 /**
- * Affectation de valeur maximale (algorithme hongrois, O(n²·m)) : chaque slot
- * reçoit au plus un joueur, chaque joueur au plus un slot, un slot peut rester
- * vide (valeur 0). `value[s][p]` = valeur du joueur p au slot s, ou null si
- * inéligible. Sert de borne exacte « sans domination » au branch & bound de
- * la synergie (lineupBuilder) : beaucoup plus rapide qu'un MILP.
- * `required[s]` : le slot s doit être rempli ; total = −Infinity si c'est
+ * Maximum-value assignment (Hungarian algorithm, O(n²·m)): each slot
+ * gets at most one player, each player at most one slot, a slot may stay
+ * empty (value 0). `value[s][p]` = value of player p in slot s, or null if
+ * ineligible. Serves as the exact "no domination" bound for the synergy
+ * branch & bound (lineupBuilder): much faster than a MILP.
+ * `required[s]`: slot s must be filled; total = −Infinity if that is
  * impossible.
  */
 export function maxAssignment(
@@ -14,7 +14,7 @@ export function maxAssignment(
 ): { total: number; colOf: number[] } {
     const n = value.length;
     if (n === 0) return { total: 0, colOf: [] };
-    // Colonnes : joueurs puis une colonne « vide » par slot (valeur 0).
+    // Columns: players then one "empty" column per slot (value 0).
     const m = nPlayers + n;
     const BIG = 1e9;
     const cost = new Float64Array(n * m).fill(BIG);
@@ -26,10 +26,10 @@ export function maxAssignment(
         }
         cost[i * m + nPlayers + i] = required?.[i] ? BIG : 0;
     }
-    // Hongrois (version potentiels, lignes ≤ colonnes), indices 1-based.
+    // Hungarian (potentials version, rows ≤ columns), 1-based indices.
     const u = new Float64Array(n + 1);
     const v = new Float64Array(m + 1);
-    const p = new Int32Array(m + 1);     // p[j] = ligne affectée à la colonne j
+    const p = new Int32Array(m + 1);     // p[j] = row assigned to column j
     const way = new Int32Array(m + 1);
     const minv = new Float64Array(m + 1);
     const usedCol = new Uint8Array(m + 1);
@@ -68,7 +68,7 @@ export function maxAssignment(
     for (let j = 1; j <= nPlayers; j++) {
         if (!p[j]) continue;
         const v = value[p[j] - 1][j - 1];
-        // Inéligible retenu : seulement si un slot requis ne peut être rempli.
+        // Ineligible picked: only if a required slot cannot be filled.
         if (v === null) return { total: -Infinity, colOf };
         colOf[p[j] - 1] = j - 1;
         total += v;

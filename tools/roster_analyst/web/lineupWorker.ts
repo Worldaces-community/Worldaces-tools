@@ -1,10 +1,10 @@
 /**
- * Web Worker de calcul de lineup (lancé par worker.ts, un par cœur) : résout
- * en parallèle les lineups 5-1 indépendantes de l'analyse.
+ * Lineup computation Web Worker (started by worker.ts, one per core): solves
+ * the analysis' independent 5-1 lineups in parallel.
  *
- * Entrée  : { type: "init", csvText, params } puis { type: "job", id, job }
- * Sorties : { type: "done", id, lineup } · { type: "log", level, text }
- *           { type: "error", id, message }
+ * Input  : { type: "init", csvText, params } then { type: "job", id, job }
+ * Outputs: { type: "done", id, lineup } · { type: "log", level, text }
+ *          { type: "error", id, message }
  */
 
 import { parseCSVText, normalizeParams, solveLineupJob, SerializedLineup } from "../src/analyze";

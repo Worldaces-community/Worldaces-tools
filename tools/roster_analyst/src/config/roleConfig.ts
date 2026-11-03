@@ -3,65 +3,49 @@
  */
 
 import { Params, RoleConfig } from "../types";
-import {
-    LIBERO_RECEPTION_SUBSTATS,
-    LIBERO_DEFENSE_SUBSTATS,
-    LIBERO_RECEPTION_ONLY_TRAITS,
-    LIBERO_DEFENSE_ONLY_TRAITS,
-} from "./constants";
-import { applySettings, resolveSettings } from "./settings";
+import { applySettings, resolveSettings, SETTINGS } from "./settings";
 
 /**
- * Restreint une config libéro à un sous-profil de phase : on ne garde que les
- * sous-stats `keepStats` (mêmes poids que le profil de base) et on retire les
- * traits `dropTraits` (utiles dans l'autre phase seulement). Le reste des traits
- * — partagés (Master Mind, Quick Learner, Overachiever, Vigorous, traits
- * d'équipe…) — est conservé tel quel : ils comptent dans les deux phases.
+ * Libero phase sub-profile: removes the traits reserved for the OTHER
+ * phase (`dropTraits`, see settings.libero). Everything else — stat weights
+ * (shared by both phases), shared trait bonuses, sign bonuses (the
+ * libero's sign effects apply in reception as in dig) — is kept.
  */
-function maskLiberoConfig(
-    libero: RoleConfig,
-    keepStats: string[],
-    dropTraits: string[]
-): RoleConfig {
-    const keep = new Set(keepStats);
-    const drop = new Set(dropTraits);
-
-    const statsWeights: Record<string, number> = {};
-    for (const [stat, w] of Object.entries(libero.statsWeights)) {
-        if (keep.has(stat)) statsWeights[stat] = w;
-    }
-    const traitBonuses: Record<string, number> = {};
-    for (const [trait, b] of Object.entries(libero.traitBonuses)) {
-        if (!drop.has(trait)) traitBonuses[trait] = b;
-    }
-    return { statsWeights, traitBonuses };
+function maskLiberoConfig(libero: RoleConfig, dropTraits: string[]): RoleConfig {
+    return {
+        statsWeights: { ...libero.statsWeights },
+        traitBonuses: Object.fromEntries(
+            Object.entries(libero.traitBonuses).filter(([t]) => !dropTraits.includes(t))
+        ),
+        signBonuses: { ...(libero.signBonuses ?? {}) },
+    };
 }
 
 /**
- * Sous-profil RÉCEPTION du libéro : sous-stats de réception service + on retire
- * les traits purement défensifs (Defensive Specialist, Last Resort). Sert à
- * comparer nos 2 libéros sur la phase de réception (rotation du 2ᵉ libéro).
+ * Libero RECEPTION sub-profile: without the settings' "defense only"
+ * traits. Used to compare our 2 liberos on the reception phase
+ * (2nd libero rotation).
  */
 export function deriveLiberoReception(libero: RoleConfig): RoleConfig {
-    return maskLiberoConfig(libero, LIBERO_RECEPTION_SUBSTATS, LIBERO_DEFENSE_ONLY_TRAITS);
+    return maskLiberoConfig(libero, SETTINGS.libero.defenseOnlyTraits);
 }
 
 /**
- * Sous-profil DÉFENSE du libéro : sous-stats de dig / passe de secours + on
- * retire le trait purement réception (Guardian). Sert à comparer nos 2 libéros
- * sur la phase de défense (rotation du 2ᵉ libéro).
+ * Libero DEFENSE sub-profile: without the settings' "reception only"
+ * traits. Used to compare our 2 liberos on the defense phase
+ * (2nd libero rotation).
  */
 export function deriveLiberoDefense(libero: RoleConfig): RoleConfig {
-    return maskLiberoConfig(libero, LIBERO_DEFENSE_SUBSTATS, LIBERO_RECEPTION_ONLY_TRAITS);
+    return maskLiberoConfig(libero, SETTINGS.libero.receptionOnlyTraits);
 }
 
 const ROLE_NAMES = ["setter", "outsideHitter", "middleBlocker", "oppositeHitter", "libero"] as const;
 
 /**
- * Valide et normalise un params.json déjà parsé (sans effet de bord sur
- * l'objet reçu) puis ACTIVE ses réglages (`settings`) pour le moteur.
- * Utilisable tel quel dans le navigateur ; la CLI lit le fichier puis appelle
- * cette fonction.
+ * Validates and normalizes an already-parsed params.json (without side effects on
+ * the received object) then ENABLES its settings (`settings`) for the engine.
+ * Usable as is in the browser; the CLI reads the file then calls
+ * this function.
  */
 export function normalizeParams(input: unknown): Params {
     if (typeof input !== "object" || input === null) {
@@ -78,9 +62,9 @@ export function normalizeParams(input: unknown): Params {
         cfg.traitBonuses ??= {};
         cfg.signBonuses ??= {};
     }
-    // traitWeight : multiplicateur global des traitBonuses (poids des traits
-    // face aux stats), appliqué une fois ici → scorer, idealScore, recrutement
-    // et affichage --verbose voient tous les bonus effectifs.
+    // traitWeight: global multiplier of the traitBonuses (weight of traits
+    // vs stats), applied once here → scorer, idealScore, recruitment
+    // and --verbose display all see the effective bonuses.
     const tw = params.traitWeight ?? 1;
     if (tw !== 1) {
         for (const config of Object.values(params.roles)) {
@@ -95,7 +79,7 @@ export function normalizeParams(input: unknown): Params {
     return params;
 }
 
-/** Parse le texte d'un params.json (cf. normalizeParams). */
+/** Parses the text of a params.json (see normalizeParams). */
 export function parseParams(text: string): Params {
     let raw: unknown;
     try {
@@ -106,21 +90,21 @@ export function parseParams(text: string): Params {
     return normalizeParams(raw);
 }
 
-/** Nombre maximum de traits qu'un joueur peut porter (rareté Special). */
+/** Maximum number of traits a player can carry (Special rarity). */
 export const MAX_TRAITS = 4;
 
 /**
- * Groupes de traits agissant sur la MÊME action → NON additifs : un joueur ne sert
- * qu'un ballon à la fois, donc cumuler Meteor Serve (jump topspin) et Float Serve
- * (float) n'additionne pas la qualité — au mieux un peu de flexibilité. On ne compte
- * donc que le MEILLEUR bonus présent dans chaque groupe (cf. scorer + idealScore).
- * NB : les autres paires NE sont PAS redondantes (Guardian/Defensive Specialist et
- * Surprise/Marksman ont des mécanismes complémentaires, mesurés distincts) → elles
- * s'additionnent normalement.
+ * Groups of traits acting on the SAME action → NOT additive: a player only serves
+ * one ball at a time, so stacking Meteor Serve (jump topspin) and Float Serve
+ * (float) does not add up quality — at best a bit of flexibility. We therefore only
+ * count the BEST bonus present in each group (see scorer + idealScore).
+ * NB: the other pairs are NOT redundant (Guardian/Defensive Specialist and
+ * Surprise/Marksman have complementary mechanisms, measured separately) → they
+ * add up normally.
  */
 export const REDUNDANT_TRAIT_GROUPS: string[][] = [["Meteor Serve", "Float Serve"]];
 
-/** Bonus de traits du rôle après effondrement des groupes redondants à leur max. */
+/** Role trait bonuses after collapsing redundant groups to their max. */
 function nonRedundantBonuses(traitBonuses: Record<string, number>): number[] {
     const grouped = new Set<string>();
     const out: number[] = [];
@@ -137,13 +121,13 @@ function nonRedundantBonuses(traitBonuses: Record<string, number>): number[] {
 
 /**
  * Calculate ideal score for a role configuration.
- * Plafond théorique d'un joueur parfait au poste : stats à 99 (moyenne pondérée
- * bornée à 99) + les MAX_TRAITS meilleurs bonus de traits du rôle + le meilleur
- * bonus de signe du rôle.
+ * Theoretical ceiling of a perfect player in the position: stats at 99 (weighted mean
+ * capped at 99) + the role's MAX_TRAITS best trait bonuses + the role's best
+ * sign bonus.
  *
- * On ne somme PAS tous les traits : leur nombre est plafonné par la rareté
- * (Special 4, Mythic 3, Legendary 2, Rare 1, Common 0) → au plus 4. Sert de
- * dénominateur de normalisation pour rendre les scores comparables entre rôles.
+ * We do NOT sum all traits: their number is capped by rarity
+ * (Special 4, Mythic 3, Legendary 2, Rare 1, Common 0) → at most 4. Used as the
+ * normalization denominator to make scores comparable across roles.
  */
 export function idealScore(config: RoleConfig): number {
     const weightSum = Object.values(config.statsWeights).reduce((a, b) => a + b, 0) || 1;
@@ -155,7 +139,7 @@ export function idealScore(config: RoleConfig): number {
         .sort((a, b) => b - a)
         .slice(0, MAX_TRAITS)
         .reduce((sum, b) => sum + b, 0);
-    // Un joueur n'a qu'un signe → plafond = meilleur bonus de signe du rôle.
+    // A player has only one sign → ceiling = the role's best sign bonus.
     const signScore = Math.max(0, ...Object.values(config.signBonuses ?? {}));
     return statScore + traitScore + signScore;
 }

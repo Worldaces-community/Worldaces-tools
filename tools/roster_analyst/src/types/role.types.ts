@@ -9,17 +9,17 @@ export type RoleName = "setter" | "outsideHitter" | "middleBlocker" | "oppositeH
 export interface RoleConfig {
     statsWeights: Record<string, number>;
     traitBonuses: Record<string, number>;
-    /** Bonus (léger) de la valeur de l'effet du signe pour ce rôle. */
+    /** (Light) bonus for the value of the sign effect for this role. */
     signBonuses?: Record<string, number>;
 }
 
 export interface Params {
     /**
-     * Multiplicateur global des traitBonuses (appliqué au chargement par
-     * loadParams) — règle le poids des traits face aux stats. Défaut 1.
+     * Global multiplier of the traitBonuses (applied on load by
+     * loadParams) — sets the weight of traits vs stats. Default 1.
      */
     traitWeight?: number;
     roles: Record<RoleName, RoleConfig>;
-    /** Seuils / poids de l'analyse (cf. config/settings.ts) ; complétés par les défauts. */
+    /** Analysis thresholds / weights (see config/settings.ts); completed with the defaults. */
     settings?: Partial<Settings>;
 }
