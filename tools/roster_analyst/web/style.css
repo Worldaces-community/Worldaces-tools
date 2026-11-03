@@ -1,0 +1,157 @@
+/* Roster Analyst — same "scoreboard" identity as the community pages
+   (scripts/build_docs.py): dark court, amber readout, Oswald / Inter / JetBrains Mono. */
+:root{
+  --bg:#0f141b; --surface:#161d27; --surface2:#1b2431; --line:#232c38;
+  --ink:#eef2f6; --ink2:#93a1b3; --ink3:#5e6b7c;
+  --amber:#ffb545; --orange:#ff6a3d; --green:#4cc38a; --red:#ff6b6b;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --display:'Oswald',system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg); color:var(--ink); margin:0; padding:0 1rem 4rem;
+  background-image:repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 120px);
+  line-height:1.45;
+}
+.wrap{max-width:1040px; margin:0 auto}
+a{color:var(--amber); text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--amber); outline-offset:2px}
+code{font-family:var(--mono); font-size:0.88em; background:var(--surface2); padding:0.05rem 0.3rem; border-radius:4px}
+
+.kicker{font-family:var(--mono); font-size:0.72rem; letter-spacing:0.16em; text-transform:uppercase; color:var(--amber); margin:2.4rem 0 0.6rem}
+h1{font-family:var(--display); font-weight:600; text-transform:uppercase; font-size:clamp(2rem,5vw,2.9rem); margin:0 0 0.5rem; line-height:1.05}
+.sub{color:var(--ink2); margin:0 0 1.4rem; max-width:68ch}
+.net{
+  height:10px; margin:0.4rem 0 1.4rem; opacity:0.8;
+  background:repeating-linear-gradient(45deg, transparent 0 9px, var(--line) 9px 10px),
+             repeating-linear-gradient(-45deg, transparent 0 9px, var(--line) 9px 10px);
+  border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+}
+
+/* steps nav */
+.steps{position:sticky; top:0; z-index:5; display:flex; gap:0.4rem; padding:0.6rem 0; background:var(--bg); border-bottom:1px solid var(--line); margin-bottom:1.2rem; overflow-x:auto}
+.steps a{font-family:var(--mono); font-size:0.8rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink2); padding:0.35rem 0.75rem; border:1px solid var(--line); border-radius:999px; white-space:nowrap}
+.steps a b{color:var(--amber); margin-right:0.3rem}
+.steps a:hover{color:var(--ink); text-decoration:none; border-color:var(--ink3)}
+
+/* panels */
+.panel{margin:0 0 2.6rem; scroll-margin-top:3.4rem}
+.panel-head{display:flex; flex-wrap:wrap; gap:0.8rem; align-items:center; justify-content:space-between; margin-bottom:0.6rem}
+.panel-head h2{font-family:var(--display); font-weight:600; text-transform:uppercase; font-size:1.5rem; margin:0}
+.num{display:inline-grid; place-items:center; width:1.6rem; height:1.6rem; border-radius:6px; background:var(--amber); color:#241505; font-family:var(--mono); font-size:0.95rem; margin-right:0.35rem; vertical-align:2px}
+.toolbar{display:flex; gap:0.5rem; flex-wrap:wrap}
+.card{position:relative; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:1rem 1.2rem; margin:0.9rem 0}
+.card h3{font-family:var(--display); font-weight:500; text-transform:uppercase; letter-spacing:0.02em; font-size:1.05rem; margin:0 0 0.8rem; color:var(--ink)}
+.advanced>summary{cursor:pointer; list-style:none; display:flex; gap:0.6rem; align-items:baseline; flex-wrap:wrap}
+.advanced>summary::-webkit-details-marker{display:none}
+.advanced>summary h3{margin:0}
+.advanced>summary h3::before{content:"▸ "; color:var(--amber)}
+.advanced[open]>summary h3::before{content:"▾ "}
+.advanced[open]>summary{margin-bottom:0.8rem}
+.hint{color:var(--ink3); font-size:0.85rem; font-weight:400; text-transform:none; letter-spacing:0}
+.panel>.hint{color:var(--ink2); margin:0 0 0.4rem}
+.warn{color:var(--amber)}
+.err{color:var(--red)}
+.row{display:flex; gap:0.7rem; align-items:center; flex-wrap:wrap; margin:0.6rem 0}
+
+/* buttons & inputs */
+button,.btn{
+  font-family:'Inter',sans-serif; font-weight:600; font-size:0.88rem; background:var(--amber); color:#241505;
+  border:1px solid var(--amber); border-radius:7px; padding:0.55rem 1rem; cursor:pointer; display:inline-block; line-height:1.2
+}
+button:hover:not(:disabled),.btn:hover{filter:brightness(1.08)}
+button:disabled{opacity:0.45; cursor:not-allowed}
+button.secondary,.btn.secondary{background:transparent; color:var(--ink); border-color:var(--line)}
+button.secondary:hover:not(:disabled),.btn.secondary:hover{border-color:var(--ink3)}
+button.small{padding:0.35rem 0.7rem; font-size:0.8rem}
+select,input[type=number]{background:var(--surface2); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:0.3rem 0.45rem; font-family:var(--mono); font-size:0.82rem}
+.num-input{width:4.6rem; text-align:right}
+.num-input.wide{width:6rem}
+input[type=range]{width:100%; accent-color:var(--amber); margin:0.15rem 0 0}
+.check{display:inline-flex; gap:0.4rem; align-items:center; cursor:pointer; color:var(--ink2); font-size:0.9rem}
+input[type=checkbox]{accent-color:var(--amber); width:1rem; height:1rem}
+
+/* tabs */
+.tabs{display:flex; gap:0.3rem; flex-wrap:wrap; border-bottom:1px solid var(--line); margin-bottom:0.5rem}
+.tab{background:transparent; color:var(--ink2); border:1px solid transparent; border-bottom:none; border-radius:7px 7px 0 0; padding:0.5rem 0.9rem; font-weight:500}
+.tab.active{background:var(--surface2); color:var(--amber); border-color:var(--line)}
+.tab:hover:not(.active){color:var(--ink)}
+
+/* control grids */
+.grid2{display:grid; gap:0.4rem 1.4rem; grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.grid3{display:grid; gap:0.2rem 1.2rem; grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.group{margin:1rem 0 0.4rem}
+.group h4{font-family:var(--mono); font-size:0.75rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--amber); margin:0 0 0.5rem; font-weight:500}
+.ctl{padding:0.35rem 0}
+.ctl-head{display:flex; align-items:center; justify-content:space-between; gap:0.5rem}
+.ctl-head label{font-size:0.88rem; color:var(--ink)}
+.ctl-head label[title]{cursor:help; text-decoration:underline dotted var(--ink3); text-underline-offset:3px}
+.ctl.compact .ctl-head label{font-size:0.83rem}
+.ctl.zero .ctl-head label{color:var(--ink3)}
+.ctl-help{color:var(--ink3); font-size:0.78rem; margin:0.2rem 0 0}
+.chips{display:flex; flex-wrap:wrap; gap:0.35rem; margin:0.5rem 0}
+.chip{display:inline-flex; align-items:center; gap:0.2rem; border:1px solid var(--line); border-radius:999px; padding:0.2rem 0.6rem; font-size:0.8rem; color:var(--ink2); cursor:pointer; background:var(--surface2)}
+.positions{display:grid; gap:0.4rem; margin:0.4rem 0 0.8rem}
+.pos-row{display:flex; gap:0.35rem; flex-wrap:wrap; align-items:center}
+.pos-trait{font-family:var(--mono); font-size:0.8rem; min-width:9rem; color:var(--ink)}
+
+/* roster */
+.drop{display:flex; flex-direction:column; align-items:center; gap:0.3rem; border:2px dashed var(--line); border-radius:10px; padding:1.8rem 1rem; text-align:center; cursor:pointer; background:var(--surface)}
+.drop:hover,.drop.over{border-color:var(--amber)}
+.drop-title{font-weight:600}
+.summary{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:0.8rem 1.1rem; margin-top:0.8rem}
+.summary .file{margin:0 0 0.6rem}
+.stats{display:flex; flex-wrap:wrap; gap:0.5rem}
+.stat{background:var(--surface2); border:1px solid var(--line); border-radius:8px; padding:0.4rem 0.7rem; min-width:6.5rem}
+.stat b{display:block; font-family:var(--mono); font-size:1.15rem; color:var(--amber); font-weight:500}
+.stat span{font-size:0.75rem; color:var(--ink2)}
+.run-row{margin-top:1rem}
+.progress{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:0.8rem 1.1rem}
+.progress-head{display:flex; justify-content:space-between; font-family:var(--mono); font-size:0.85rem}
+.progress ol{margin:0.5rem 0 0; padding-left:1.3rem; font-size:0.88rem; color:var(--ink2)}
+.progress li.done::marker{color:var(--green)}
+.progress li.now{color:var(--amber)}
+.progress li.now::after{content:" …"; animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.logs{background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--amber); border-radius:8px; padding:0.4rem 0.9rem; font-size:0.85rem; margin-bottom:0.9rem}
+.logs p{margin:0.3rem 0}
+
+/* report (rendered markdown) */
+.report{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:0.6rem 1.2rem 1.2rem}
+.report .empty{color:var(--ink3)}
+.report h1{font-size:1.6rem; margin:0.6rem 0}
+.report h2{font-family:var(--display); text-transform:uppercase; font-weight:600; font-size:1.25rem; display:inline; margin:0}
+.report h3{font-family:var(--display); font-weight:500; font-size:1.05rem; margin:1rem 0 0.4rem}
+.report details{margin:0.6rem 0}
+.report details>summary{cursor:pointer; padding:0.35rem 0; color:var(--ink)}
+.report details>summary::marker{color:var(--amber)}
+.report>details{border-top:1px solid var(--line); padding-top:0.5rem; margin-top:1rem}
+.report details details{background:var(--surface2); border:1px solid var(--line); border-radius:8px; padding:0.2rem 0.8rem}
+.report p,.report li{font-size:0.92rem}
+.report blockquote{margin:0.6rem 0; padding:0.2rem 0.9rem; border-left:3px solid var(--orange); color:var(--ink2)}
+.table-wrap{overflow-x:auto; margin:0.6rem 0}
+.report table{border-collapse:collapse; font-size:0.84rem; min-width:100%}
+.report th,.report td{border-bottom:1px solid var(--line); padding:0.35rem 0.55rem; text-align:left; white-space:nowrap}
+.report th{font-family:var(--mono); font-weight:500; font-size:0.74rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink2); background:var(--surface2)}
+.report tr:hover td{background:rgba(255,255,255,0.02)}
+
+footer{margin-top:3rem; padding-top:1.2rem; border-top:1px solid var(--line); font-family:var(--mono); font-size:0.78rem; color:var(--ink3); display:flex; gap:1.2rem; flex-wrap:wrap}
+footer a{color:var(--ink2)}
+
+@media (max-width:600px){
+  .card{padding:0.8rem 0.9rem}
+  .report{padding:0.4rem 0.8rem 1rem}
+  .grid3,.grid2{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important; animation:none !important; scroll-behavior:auto !important}}
+@media print{
+  body{background:#fff; color:#000; padding:0}
+  .steps,#settings,#roster,.toolbar,footer,.net,.sub,.kicker,h1{display:none !important}
+  .report{border:none; background:#fff; color:#000}
+  .report th{background:#eee; color:#000}
+  .report details details{background:#fff}
+}

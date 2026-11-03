@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roster Analyst &mdash; WorldAces tools</title>
+<meta name="description" content="Build your scoring profile, load your World Aces roster CSV and get a recommended 5-1 lineup, academy moves, recruitment targets and players to sell. Runs entirely in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker"><a href="../">WorldAces &middot; community</a> &middot; roster analyst</p>
+  <h1>Roster Analyst</h1>
+  <p class="sub">Define how you value each role, load your roster export and get a recommended
+    5-1 lineup (starters, bench, injury reserves), academy moves, weak spots, recruitment targets
+    and players to sell. Everything runs in your browser &mdash; nothing is uploaded.</p>
+  <div class="net" aria-hidden="true"></div>
+
+  <nav class="steps" aria-label="Steps">
+    <a href="#settings"><b>1</b> Settings</a>
+    <a href="#roster"><b>2</b> Roster</a>
+    <a href="#report"><b>3</b> Report</a>
+  </nav>
+
+  <!-- ─── 1. SETTINGS ─────────────────────────────────────────────── -->
+  <section id="settings" class="panel">
+    <header class="panel-head">
+      <h2><span class="num">1</span> Settings</h2>
+      <div class="toolbar">
+        <label class="btn secondary" for="paramsFile">Import params.json</label>
+        <input id="paramsFile" type="file" accept=".json,application/json" hidden>
+        <button id="exportParams" type="button">Export params.json</button>
+        <button id="resetParams" type="button" class="secondary">Reset to neutral</button>
+      </div>
+    </header>
+    <p class="hint" id="paramsStatus">Neutral template loaded: every stat weighs the same and no trait or sign gives a bonus.
+      Tune it, then export your <code>params.json</code> to reuse it next time.</p>
+
+    <div class="card">
+      <h3>Global</h3>
+      <div class="grid2" id="globalControls"></div>
+    </div>
+
+    <div class="card">
+      <h3>Role profiles</h3>
+      <div class="tabs" role="tablist" id="roleTabs"></div>
+      <div id="roleTools" class="row"></div>
+      <div id="rolePanel"></div>
+    </div>
+
+    <details class="card advanced">
+      <summary><h3>Analysis thresholds</h3><span class="hint">lineup weights, academy, decline, libero rotation, roster quotas, recruitment</span></summary>
+      <div id="advancedControls"></div>
+    </details>
+  </section>
+
+  <!-- ─── 2. ROSTER ───────────────────────────────────────────────── -->
+  <section id="roster" class="panel">
+    <header class="panel-head">
+      <h2><span class="num">2</span> Roster</h2>
+      <div class="toolbar">
+        <button id="loadExample" type="button" class="secondary">Use example roster</button>
+      </div>
+    </header>
+    <label class="drop" id="drop" for="csvFile">
+      <input id="csvFile" type="file" accept=".csv,text/csv" hidden>
+      <span class="drop-title">Drop your roster CSV here or click to browse</span>
+      <span class="hint">In-game roster export, English or French headers.</span>
+    </label>
+    <div id="rosterSummary" class="summary" hidden></div>
+    <div class="row run-row">
+      <label class="check"><input id="verbose" type="checkbox"> Show score formulas in the report</label>
+      <button id="run" type="button" disabled>Run analysis</button>
+      <button id="cancel" type="button" class="secondary" hidden>Cancel</button>
+    </div>
+    <div id="progress" class="progress" hidden aria-live="polite"></div>
+  </section>
+
+  <!-- ─── 3. REPORT ───────────────────────────────────────────────── -->
+  <section id="report" class="panel">
+    <header class="panel-head">
+      <h2><span class="num">3</span> Report</h2>
+      <div class="toolbar">
+        <button id="downloadMd" type="button" class="secondary" disabled>Download .md</button>
+        <button id="printReport" type="button" class="secondary" disabled>Print</button>
+      </div>
+    </header>
+    <div id="logs" class="logs" hidden></div>
+    <article id="reportBody" class="report"><p class="empty">No report yet &mdash; load a roster and run the analysis.</p></article>
+  </section>
+
+  <footer>
+    <a href="https://github.com/Worldaces-community/Worldaces-tools/tree/main/tools/roster_analyst">Source &amp; docs</a>
+    <a href="../">All tools</a>
+    <span>by @Peariforme &middot; MIT</span>
+  </footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

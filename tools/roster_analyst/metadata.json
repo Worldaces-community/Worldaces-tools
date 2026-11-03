@@ -1,0 +1,9 @@
+{
+  "name": "Roster Analyst",
+  "description": "Recommended 5-1 lineup (starters, bench, injury reserves, sign chemistry), academy moves, weak spots, recruitment targets and players to sell — from your roster CSV and your own scoring profile (in-browser settings editor, exportable params.json).",
+  "author": "@Peariforme",
+  "tags": ["roster", "lineup", "recruitment", "browser"],
+  "entrypoint": "src/cli.ts",
+  "runnable_in_browser": true,
+  "browser_build": "web/dist"
+}

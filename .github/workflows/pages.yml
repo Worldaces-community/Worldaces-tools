@@ -22,6 +22,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # Node/TypeScript tools shipping a static web app: any tool whose package.json
+      # has a "build:browser" script is built here (output referenced by the
+      # `browser_build` field of its metadata.json, copied by build_docs.py).
+      - name: Build browser apps of Node tools
+        run: |
+          for pkg in tools/*/package.json; do
+            dir=$(dirname "$pkg")
+            if node -e "process.exit(require('./$pkg').scripts?.['build:browser'] ? 0 : 1)"; then
+              echo "::group::build $dir"
+              (cd "$dir" && npm ci && npm run build:browser)
+              echo "::endgroup::"
+            fi
+          done
       - name: Build docs/index.html from tools metadata
         run: python scripts/build_docs.py
       - uses: actions/upload-pages-artifact@v3

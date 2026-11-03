@@ -1,0 +1,35 @@
+First name,Last name,Age,Rarity,Position,Roles,Traits,Sign,Progress,ATTACK,SETTING,RECEPTION,SERVE,BLOCK,STAMINA,setting,serve,spike,quick,power,awareness,attack,back attack,reception,overhand,bump,block,read block,commit block,focus,defense,stamina,reflex
+Alex,Arden,29,Legendary,Bench,Setter,Momentum Addict; Meteor Serve,Virgo,Improving,43,62,32,69,32,76,63,72,43,38,42,83,27,36,28,69,42,27,36,38,70,38,76,33
+Sam,Holt,33,Mythic,Reserve,Setter,Hunter; Tenacious; True Leader,Scorpio,Considering retirement,74,96,56,90,64,90,99,92,76,66,73,99,60,64,51,99,63,56,79,68,93,73,90,73
+Noa,Oakes,32,Legendary,Bench,Setter; Libero,Quick Learner; Hunter,Libra,Improving,54,84,51,73,48,99,88,75,54,38,62,82,46,41,48,86,64,42,61,61,79,41,99,47
+Lior,Vale,22,Mythic,Bench,Setter,Hunter; Float Serve; Crafty,Pisces,Improving,53,75,45,72,46,73,76,74,53,56,57,72,50,40,47,87,30,46,35,43,74,41,73,52
+Kai,Drake,24,Mythic,Bench,Setter,Momentum Addict; Tenacious; Surprise Attack,Capricorn,Improving,51,84,60,82,51,95,89,86,48,51,51,75,50,52,62,83,54,50,53,46,74,42,95,48
+Ren,Arden,33,Rare,Bench,Outside Hitter,Master Mind,Virgo,Considering retirement,70,34,67,63,52,47,31,66,71,81,75,45,43,63,65,41,82,53,27,55,39,75,47,31
+Iris,Holt,33,Mythic,,Outside Hitter,Master Mind; Surprise Attack; Meteor Serve,Gemini,Improving,89,58,95,91,64,80,55,97,93,93,92,61,58,90,98,77,94,64,61,60,53,82,80,69
+Maya,Oakes,27,Rare,Bench,Outside Hitter; Setter,Crafty,Sagittarius,Improving,77,59,95,90,60,56,59,95,73,86,85,60,61,97,99,57,88,62,48,56,47,87,56,60
+Teo,Vale,20,Mythic,Reserve,Outside Hitter,Moving Wall; Loudmouth; Marksman,Virgo,Improving,93,66,95,80,61,66,67,83,99,91,98,69,52,88,99,69,83,57,62,67,59,99,66,64
+Lina,Drake,27,Legendary,Reserve,Outside Hitter,Moving Wall; True Leader,Cancer,Improving,74,49,75,69,48,37,49,72,75,83,85,48,56,69,76,46,79,46,54,54,29,69,37,57
+Oren,Arden,18,Mythic,,Outside Hitter,Master Mind; Momentum Addict; Meteor Serve,Gemini,Improving,87,46,85,86,46,61,44,92,92,92,65,55,55,93,88,52,83,39,53,62,53,73,61,51
+Zoe,Holt,30,Mythic,Bench,Outside Hitter; Middle Blocker,Master Mind; Float Serve; Tenacious,Virgo,Improving,82,58,81,84,59,52,59,90,81,97,86,54,49,84,83,60,83,58,63,63,46,72,52,48
+Ilan,Oakes,25,Legendary,Bench,Outside Hitter,Loudmouth; Defensive Specialist,Cancer,Improving,71,39,64,66,45,37,39,71,74,75,83,30,44,67,60,39,88,46,37,37,46,75,37,41
+Nina,Vale,23,Rare,Reserve,Outside Hitter; Setter,Master Mind,Capricorn,Improving,80,42,76,77,60,45,40,82,87,64,77,42,53,87,79,48,68,64,40,47,53,81,45,58
+Elio,Drake,28,Mythic,Reserve,Outside Hitter; Libero,Master Mind; Tenacious; Overachiever,Gemini,Improving,64,52,81,74,46,44,54,80,58,73,83,35,50,77,83,52,72,44,45,34,53,94,44,52
+Sana,Arden,32,Legendary,,Middle Blocker; Opposite Hitter,Vigorous; Loudmouth,Sagittarius,Improving,86,64,60,60,94,71,65,60,92,92,99,67,55,46,60,56,55,99,86,87,96,63,71,68
+Jude,Holt,29,Mythic,,Middle Blocker; Libero,Loudmouth; Last Resort; Overachiever,Gemini,Improving,76,59,49,45,87,58,58,42,74,87,97,59,61,57,47,65,54,92,77,84,95,45,58,46
+Mira,Oakes,30,Mythic,Bench,Middle Blocker; Libero,Tenacious; Hunter; Meteor Serve,Aquarius,Improving,73,41,45,46,82,42,38,45,76,85,87,54,54,46,44,48,48,86,83,76,72,45,42,56
+Aris,Vale,17,Mythic,,Middle Blocker; Libero,Loudmouth; Guardian; Meteor Serve,Virgo,Improving,78,54,50,42,76,47,58,41,89,80,79,54,42,40,49,38,52,74,84,80,90,58,47,48
+Lea,Drake,27,Legendary,Bench,Middle Blocker; Opposite Hitter,Float Serve; Tenacious,Aries,Improving,88,70,69,64,95,55,71,64,92,87,99,70,56,65,67,68,68,97,89,95,99,85,55,68
+Tomi,Arden,32,Legendary,Bench,Middle Blocker,Hunter; Momentum Addict,Gemini,Considering retirement,77,61,55,61,75,70,62,63,78,99,81,58,43,55,53,66,63,74,87,77,78,56,70,39
+Ines,Holt,23,Mythic,,Middle Blocker,Momentum Addict; Loudmouth; True Leader,Capricorn,Improving,66,29,55,35,71,48,26,34,73,51,81,37,47,31,59,29,45,72,57,78,75,43,48,29
+Bram,Oakes,26,Rare,,Middle Blocker; Libero,Master Mind,Sagittarius,Improving,87,61,57,52,86,58,66,52,96,96,84,51,52,52,58,35,56,91,78,84,81,55,58,55
+Yara,Vale,24,Legendary,Reserve,Middle Blocker,Marksman; Defensive Specialist,Scorpio,Improving,73,43,55,47,72,51,39,46,80,75,74,59,49,48,57,54,44,66,79,93,83,52,51,40
+Cleo,Drake,17,Mythic,Academy,Opposite Hitter; Outside Hitter,Overachiever; Meteor Serve; Last Resort,Gemini,Improving,71,57,29,91,64,41,57,96,68,79,83,34,86,73,25,50,41,73,54,35,46,46,41,32
+Davi,Arden,31,Rare,Bench,Opposite Hitter; Middle Blocker,Guardian,Leo,Starting to decline,88,69,53,81,72,67,69,81,87,96,98,57,99,78,52,57,59,79,65,55,48,50,67,51
+Enzo,Holt,26,Legendary,Bench,Opposite Hitter; Setter,Momentum Addict; Surprise Attack,Cancer,Improving,71,39,37,66,58,51,36,68,79,65,61,46,62,66,36,38,42,68,41,40,32,37,51,36
+Fay,Oakes,30,Legendary,Reserve,Opposite Hitter; Outside Hitter,Momentum Addict; Float Serve,Capricorn,Improving,73,55,36,68,64,55,56,71,71,84,84,40,68,79,34,52,38,73,45,47,54,44,55,49
+Gil,Vale,20,Special,Bench,Opposite Hitter,Marksman; Moving Wall; Meteor Serve; Loudmouth,Sagittarius,Improving,71,35,39,63,69,41,30,64,74,69,66,42,74,72,35,40,57,85,37,38,40,44,41,29
+Hana,Drake,32,Mythic,Reserve,Libero,Last Resort; Marksman; Defensive Specialist,Virgo,Improving,67,56,91,72,57,54,47,70,66,55,68,85,75,61,92,85,84,50,56,62,94,91,54,99
+Ivo,Arden,21,Mythic,Reserve,Libero,Hunter; Defensive Specialist; Tenacious,Virgo,Improving,49,47,78,48,44,56,41,46,52,45,36,73,40,40,79,80,76,36,55,43,74,76,56,82
+Juno,Holt,27,Mythic,Reserve,Libero,Last Resort; Master Mind; Hunter,Gemini,Improving,43,44,76,43,45,34,38,41,44,39,39,64,39,36,77,73,74,41,42,46,88,61,34,68
+Kira,Oakes,29,Special,Bench,Libero,Momentum Addict; Crafty; Guardian; Overachiever,Scorpio,Improving,49,60,96,57,68,58,53,55,40,62,51,85,56,55,98,98,87,66,58,67,89,95,58,90
+Luca,Vale,26,Mythic,Reserve,Libero; Opposite Hitter,Momentum Addict; True Leader; Meteor Serve,Sagittarius,Improving,64,64,92,50,69,58,58,45,60,73,54,96,58,65,91,91,95,72,57,47,79,99,58,88

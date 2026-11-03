@@ -2,7 +2,8 @@
 """Generate docs/index.html by listing all tools in tools/*.
 
 Reads tools/<x>/metadata.json when it exists (otherwise it just uses the folder name) and produces a
-static page. Called by the `.github/workflows/pages.yml` workflow on each push to main.
+static page. Browser tools are either Pyodide pages (`browser_entry`, optional `browser.html`) or a
+prebuilt static web app (`browser_build`: folder with an index.html, copied to docs/<slug>/). Called by the `.github/workflows/pages.yml` workflow on each push to main.
 
 Design: "scoreboard" identity shared with the per-tool pages — dark hardwood-court background,
 amber readout accent, condensed display type for headings, monospace for numbers/stats/labels.
@@ -282,7 +283,19 @@ def main():
 
                 # Create tool page if runnable_in_browser
                 tool_page = f"https://github.com/{repo}/tree/main/tools/{slug}"
-                if meta.get("runnable_in_browser"):
+                browser_build = meta.get("browser_build")
+                if meta.get("runnable_in_browser") and browser_build:
+                        # Prebuilt static web app (e.g. a Node/TypeScript tool built by the Pages
+                        # workflow with `npm run build:browser`): copied as-is to docs/<slug>/.
+                        build_dir = tool_dir / browser_build
+                        if (build_dir / "index.html").exists():
+                                dest = DOCS_DIR / slug
+                                shutil.rmtree(dest, ignore_errors=True)
+                                shutil.copytree(build_dir, dest)
+                                tool_page = f"{slug}/"
+                        else:
+                                print(f"warning: {slug}: {browser_build}/index.html not found (build step not run?)")
+                elif meta.get("runnable_in_browser"):
                         py_src = tool_dir / meta.get("browser_entry", "browser.py")
                         if py_src.exists():
                                 py_dest = DOCS_PY / f"{slug}_browser.py"
