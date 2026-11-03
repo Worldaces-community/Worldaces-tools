@@ -4,8 +4,14 @@
  * vide (valeur 0). `value[s][p]` = valeur du joueur p au slot s, ou null si
  * inéligible. Sert de borne exacte « sans domination » au branch & bound de
  * la synergie (lineupBuilder) : beaucoup plus rapide qu'un MILP.
+ * `required[s]` : le slot s doit être rempli ; total = −Infinity si c'est
+ * impossible.
  */
-export function maxAssignment(value: (number | null)[][], nPlayers: number): { total: number; colOf: number[] } {
+export function maxAssignment(
+    value: (number | null)[][],
+    nPlayers: number,
+    required?: boolean[]
+): { total: number; colOf: number[] } {
     const n = value.length;
     if (n === 0) return { total: 0, colOf: [] };
     // Colonnes : joueurs puis une colonne « vide » par slot (valeur 0).
@@ -18,7 +24,7 @@ export function maxAssignment(value: (number | null)[][], nPlayers: number): { t
             const v = row[j];
             if (v !== null) cost[i * m + j] = -v;
         }
-        cost[i * m + nPlayers + i] = 0;
+        cost[i * m + nPlayers + i] = required?.[i] ? BIG : 0;
     }
     // Hongrois (version potentiels, lignes ≤ colonnes), indices 1-based.
     const u = new Float64Array(n + 1);
@@ -61,8 +67,12 @@ export function maxAssignment(value: (number | null)[][], nPlayers: number): { t
     let total = 0;
     for (let j = 1; j <= nPlayers; j++) {
         if (!p[j]) continue;
+        const v = value[p[j] - 1][j - 1];
+        // Inéligible retenu : seulement si un slot requis ne peut être rempli.
+        if (v === null) return { total: -Infinity, colOf };
         colOf[p[j] - 1] = j - 1;
-        total += value[p[j] - 1][j - 1]!;
+        total += v;
     }
+    if (required?.some((r, i) => r && colOf[i] < 0)) return { total: -Infinity, colOf };
     return { total, colOf };
 }

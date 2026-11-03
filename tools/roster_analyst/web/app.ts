@@ -401,12 +401,9 @@ $("loadExample").addEventListener("click", async () => {
 // ─── 3. Run & report ────────────────────────────────────────────────────────
 
 const STEP_LABELS: Record<string, string> = {
-    availability: "Availability (academy, declining players)",
-    rankings: "Role rankings",
-    lineup: "5-1 lineup (exact search, sign chemistry)",
-    academy: "Academy moves",
-    recruitment: "Weak spots & recruitment",
-    roster: "Roster management",
+    availability: "Role scores & availability (lineup with / without each declining player)",
+    lineup: "5-1 lineups: recommended + Academy hypothesis (exact search, sign chemistry)",
+    report: "Report: rankings, chemistry, Academy moves, weak spots, recruitment, roster",
 };
 
 let worker: Worker | null = null;

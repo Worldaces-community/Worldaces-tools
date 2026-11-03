@@ -1,13 +1,19 @@
 /**
  * Web Worker : exécute l'analyse hors du thread de l'interface (le branch &
- * bound de la synergie peut prendre plusieurs minutes).
+ * bound de la synergie peut prendre plusieurs secondes par lineup). Les
+ * lineups indépendantes sont réparties sur des workers lineupWorker.js (un
+ * par cœur) ; sans workers imbriqués, tout tourne ici, séquentiellement.
  *
  * Entrée  : { csvText, params (objet params.json), verbose, paramsLabel }
  * Sorties : { type: "progress", step } · { type: "log", level, text }
  *           { type: "result", markdown } · { type: "error", message }
  */
 
-import { parseCSVText, normalizeParams, runAnalysis, MarkdownReporter } from "../src/analyze";
+import {
+    parseCSVText, normalizeParams, runAnalysis, runAnalysisParallel, poolSolver, MarkdownReporter,
+    SerializedLineup, AnalysisOptions,
+} from "../src/analyze";
+import type { LineupWorkerMessage, LineupWorkerRequest } from "./lineupWorker";
 
 export interface WorkerRequest {
     csvText: string;
@@ -31,17 +37,46 @@ const fmt = (args: unknown[]): string => args.map((a) => (typeof a === "string" 
 console.warn = (...args: unknown[]) => ctx.postMessage({ type: "log", level: "warn", text: fmt(args) });
 console.log = (...args: unknown[]) => ctx.postMessage({ type: "log", level: "info", text: fmt(args) });
 
-ctx.onmessage = (ev) => {
+/** Exécutants : un worker de lineup par cœur (le thread courant compris). */
+function spawnRunners(csvText: string, rawParams: unknown): ((job: number[]) => Promise<SerializedLineup>)[] {
+    const n = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 2) - 1));
+    return Array.from({ length: n }, () => {
+        const w = new Worker("lineupWorker.js");
+        const pending = new Map<number, { resolve: (l: SerializedLineup) => void; reject: (e: Error) => void }>();
+        let nextId = 0;
+        w.onmessage = (ev: MessageEvent<LineupWorkerMessage>) => {
+            const m = ev.data;
+            if (m.type === "log") { ctx.postMessage(m); return; }
+            const p = pending.get(m.id);
+            pending.delete(m.id);
+            if (m.type === "done") p?.resolve(m.lineup);
+            else p?.reject(new Error(m.message));
+        };
+        w.onerror = (e) => { for (const p of pending.values()) p.reject(new Error(`Lineup worker: ${e.message}`)); };
+        const init: LineupWorkerRequest = { type: "init", csvText, params: rawParams };
+        w.postMessage(init);
+        return (job: number[]) => new Promise<SerializedLineup>((resolve, reject) => {
+            const id = nextId++;
+            pending.set(id, { resolve, reject });
+            const req: LineupWorkerRequest = { type: "job", id, job };
+            w.postMessage(req);
+        });
+    });
+}
+
+ctx.onmessage = async (ev) => {
     const { csvText, params: rawParams, verbose, paramsLabel } = ev.data;
     try {
         const params = normalizeParams(rawParams);
         const players = parseCSVText(csvText);
         const md = new MarkdownReporter();
         md.verbose = verbose;
-        runAnalysis(players, params, [md], {
+        const options: AnalysisOptions = {
             paramsLabel,
             onProgress: (step) => ctx.postMessage({ type: "progress", step }),
-        });
+        };
+        if (typeof Worker === "undefined") runAnalysis(players, params, [md], options);
+        else await runAnalysisParallel(players, params, [md], poolSolver(spawnRunners(csvText, rawParams)), options);
         ctx.postMessage({ type: "result", markdown: md.toMarkdown() });
     } catch (e) {
         ctx.postMessage({ type: "error", message: (e as Error).message ?? String(e) });

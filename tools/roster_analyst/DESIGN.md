@@ -13,7 +13,12 @@ only as an example and for tests.
 
 ## Code layout
 - `src/analyze.ts` — orchestration (`runAnalysis`), Node-free: shared by the CLI and the web app.
-- `src/cli.ts` — Node CLI (file reading, console output + `--md`).
+  `runAnalysisParallel` first solves the independent lineups (Improving base + each decliner,
+  then recommended 5-1 + Academy hypothesis) through an injected `LineupSolver` (workers), puts
+  them in the `LineupBuilder` cache, then runs `runAnalysis` (cache hits only). Progress steps
+  follow the real computation: `availability` → `lineup` → `report`.
+- `src/cli.ts` — Node CLI (file reading, console output + `--md`); also the `worker_threads`
+  lineup worker (`--sequential` disables the workers).
 - `src/models/playerParser.ts` — `parseCSVText`: CSV reading (French headers, French → English
   aliases for roles, traits, rarities, signs).
 - `src/config/` — `constants.ts` (labels, stats, traits, libero constants, exclusive pairs),
@@ -34,7 +39,8 @@ only as an example and for tests.
 - `src/tools/verifyLineup.ts` — checks the lineup builder against an exhaustive enumeration
   (`npm run verify-lineup -- <roster.csv> <params.json> [nbPlayers] [seed]`).
 - `web/` — browser app: `app.ts` (params editor, CSV import, report rendering), `worker.ts`
-  (analysis in a Web Worker), `schema.ts` (neutral template, params.json import/export, help
+  (analysis in a Web Worker), `lineupWorker.ts` (lineup workers spawned by `worker.ts`, one per
+  core), `schema.ts` (neutral template, params.json import/export, help
   texts), `build.mjs` (esbuild → `web/dist/`).
 
 **Rule**: nothing under `src/` (except `cli.ts` and `src/tools/`) may depend on Node —
@@ -208,14 +214,17 @@ exclusive pairs, redundant traits, reception/defense split of the libero) stay i
   guarantee, shown sub-optimal on a real roster). Retained method (`optimizeSignSynergy`):
   1. base MILP without chemistry + local search ⇒ starting solutions;
   2. **branch & bound** on the 7 starters with valid upper bounds: optimal assignment
-     (Hungarian algorithm, `assignment.ts`) of remaining starters + bench (max entry bonus) +
+     (Hungarian algorithm, `assignment.ts`) of remaining starters + bench (entry bonus bounded
+     per slot and sign with the same best-sign-per-relation relaxation as the chemistry bound) +
      reserves without dominance, and a chemistry bound (best sign still available per
      relation; exact enumeration when ≤ 2 free slots); symmetry of the 2 OH / 2 MB broken;
-  3. at each leaf, **exact** bench + reserves: Hungarian assignment, then joint MILP if the
-     substitute ≥ reserve dominance is violated.
+  3. at each leaf, **exact** bench + reserves: Hungarian assignment; if the substitute ≥
+     reserve dominance is violated, branch & bound on per-role thresholds (substitutes ≥ t ≥
+     reserves), each node being a Hungarian assignment with substitutes ≥ lo and reserves ≤ hi
+     (the equivalent yalps MILP could take minutes per call when scores are close, e.g. with
+     uniform stat weights).
   Checked against an exhaustive enumeration (starters × bench MILP) on sub-rosters. Time:
-  ~10-80 s per lineup, ~1-3 min per report on large rosters; results cached per pool (the
-  decliners' base = main lineup). Time limit `settings.lineup.synergyTimeLimitSec`: beyond it,
+  a few seconds per lineup; results cached per pool (the decliners' base = main lineup). Time limit `settings.lineup.synergyTimeLimitSec`: beyond it,
   best lineup found + "optimality not proven" warning. The **starter ≥ substitute dominance is
   lifted** when there are signs (a substitute's Δ > 0 flags a player left out for chemistry).
   The substitute/reserve follows their starter in front/back swaps.

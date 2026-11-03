@@ -87,6 +87,19 @@ export interface SubSlot {
     replacesSlot: string;
 }
 
+/**
+ * Lineup 5-1 optimisée, par noms de joueurs : transportable entre threads
+ * (calcul parallèle dans des workers, cf. analyze.ts), puis réinjectée dans
+ * le cache via `LineupBuilder.importFiveOne`.
+ */
+export interface SerializedLineup {
+    starters:     (string | null)[];
+    subs:         (string | null)[];
+    reserves:     (string | null)[];
+    objective:    number;
+    synergyValue: number;
+}
+
 export interface Substitute {
     label: string;
     sub: ScoredPlayer | null;
@@ -164,16 +177,18 @@ export class LineupBuilder {
 
     // ─── API publique (signatures inchangées) ─────────────────────────────────
 
+    private static readonly FIVE_ONE_STARTERS: SlotDef[] = [
+        { slot: "Setter",               role: "setter"         },
+        { slot: "Libero",               role: "libero"         },
+        { slot: "Front Outside Hitter", role: "outsideHitter"  },
+        { slot: "Back Outside Hitter",  role: "outsideHitter"  },
+        { slot: "Front Middle Blocker", role: "middleBlocker"  },
+        { slot: "Back Middle Blocker",  role: "middleBlocker"  },
+        { slot: "Opposite",             role: "oppositeHitter" },
+    ];
+
     buildFiveOneLineup(): LineupResult {
-        const starterDefs: SlotDef[] = [
-            { slot: "Setter",               role: "setter"         },
-            { slot: "Libero",               role: "libero"         },
-            { slot: "Front Outside Hitter", role: "outsideHitter"  },
-            { slot: "Back Outside Hitter",  role: "outsideHitter"  },
-            { slot: "Front Middle Blocker", role: "middleBlocker"  },
-            { slot: "Back Middle Blocker",  role: "middleBlocker"  },
-            { slot: "Opposite",             role: "oppositeHitter" },
-        ];
+        const starterDefs = LineupBuilder.FIVE_ONE_STARTERS;
 
         // Contraintes d'ordre tactique 5-1 :
         //   Front OH >= Back OH  (meilleur attaquant en avant)
@@ -212,6 +227,60 @@ export class LineupBuilder {
             });
         }
         return this._greedySubs(lineup, subSlotDefs);
+    }
+
+    /** Optimise le 5-1 de `allRankings` (ou le lit en cache) et le sérialise. */
+    static solveFiveOne(allRankings: Record<RoleName, ScoredPlayer[]>): SerializedLineup {
+        new LineupBuilder(allRankings).buildFiveOneLineup();
+        const { key } = LineupBuilder.cacheEntryOf(
+            allRankings, LineupBuilder.FIVE_ONE_STARTERS, LineupBuilder.getFiveOneSubSlots());
+        const { best, synergyValue } = LineupBuilder.cache.get(key)!;
+        const nm = (sp: ScoredPlayer | null) => sp?.player.fullName ?? null;
+        return {
+            starters: best.starters.map(nm), subs: best.subs.map(nm), reserves: best.reserves.map(nm),
+            objective: best.objective, synergyValue,
+        };
+    }
+
+    /**
+     * Met en cache un 5-1 calculé ailleurs (`solveFiveOne` dans un worker) :
+     * le `buildFiveOneLineup` suivant sur les mêmes classements le relit.
+     */
+    static importFiveOne(allRankings: Record<RoleName, ScoredPlayer[]>, s: SerializedLineup): void {
+        const subSlotDefs = LineupBuilder.getFiveOneSubSlots();
+        const { key, pools } = LineupBuilder.cacheEntryOf(allRankings, LineupBuilder.FIVE_ONE_STARTERS, subSlotDefs);
+        const find = (role: RoleName, name: string | null) =>
+            name === null ? null : pools[role].find((sp) => sp.player.fullName === name) ?? null;
+        LineupBuilder.cache.set(key, {
+            best: {
+                starters: LineupBuilder.FIVE_ONE_STARTERS.map((d, i) => find(d.role, s.starters[i])),
+                subs:     subSlotDefs.map((d, j) => find(d.role, s.subs[j])),
+                reserves: subSlotDefs.map((d, j) => find(d.role, s.reserves[j])),
+                objective: s.objective,
+            },
+            synergyValue: s.synergyValue,
+        });
+    }
+
+    /** Pools triés par score desc et clé de cache d'un problème de lineup. */
+    private static cacheEntryOf(
+        allRankings: Record<RoleName, ScoredPlayer[]>,
+        starterDefs: SlotDef[],
+        subSlotDefs: SubSlot[]
+    ): { key: string; pools: Record<string, ScoredPlayer[]> } {
+        const pools: Record<string, ScoredPlayer[]> = {};
+        for (const def of [...starterDefs, ...subSlotDefs]) {
+            pools[def.role] ??= [...(allRankings[def.role] ?? [])].sort(
+                (a, b) => b.score - a.score
+            );
+        }
+        const key = JSON.stringify([
+            starterDefs, subSlotDefs, LineupBuilder.signSynergy,
+            LineupBuilder.subObjectiveWeight, LineupBuilder.reserveObjectiveWeight,
+            Object.entries(pools).map(([r, pool]) =>
+                [r, pool.map((sp) => [sp.player.fullName, sp.score, sp.player.sign])]),
+        ]);
+        return { key, pools };
     }
 
     // ─── Helpers statiques ────────────────────────────────────────────────────
@@ -417,22 +486,10 @@ export class LineupBuilder {
         const nS = starterDefs.length;
         const nB = subSlotDefs.length;
 
-        // Pools triés par score desc (titulaires + remplaçants)
-        const pools: Record<string, ScoredPlayer[]> = {};
-        for (const def of [...starterDefs, ...subSlotDefs]) {
-            pools[def.role] ??= [...(this.allRankings[def.role] ?? [])].sort(
-                (a, b) => b.score - a.score
-            );
-        }
-
-        // Cache : un même pool est souvent re-optimisé (disponibilité,
-        // Academy, lineup principale) — le branch & bound coûte cher.
-        const cacheKey = JSON.stringify([
-            starterDefs, subSlotDefs, LineupBuilder.signSynergy,
-            LineupBuilder.subObjectiveWeight, LineupBuilder.reserveObjectiveWeight,
-            Object.entries(pools).map(([r, pool]) =>
-                [r, pool.map((sp) => [sp.player.fullName, sp.score, sp.player.sign])]),
-        ]);
+        // Pools triés par score desc (titulaires + remplaçants). Cache : un
+        // même pool est souvent re-optimisé (disponibilité, Academy, lineup
+        // principale) — le branch & bound coûte cher.
+        const { key: cacheKey, pools } = LineupBuilder.cacheEntryOf(this.allRankings, starterDefs, subSlotDefs);
         let cached = LineupBuilder.cache.get(cacheKey);
         if (!cached) {
             // 1) MILP sans synergie (sélection par score pur, domination stricte).
@@ -702,7 +759,7 @@ export class LineupBuilder {
             let sol = { subs, reserves, objective: a.total };
             if (!dominated) {
                 sol = this.solveBench(subSlotDefs, pools, S,
-                    (sp, j) => bonus(sp.player.sign, j), false);
+                    (sp, j) => bonus(sp.player.sign, j));
             }
             const total = starterPart + sol.objective;
             if (total > bestTotal + 1e-9) {
@@ -788,9 +845,76 @@ export class LineupBuilder {
             }
             return unitValue * units;
         };
-        const maxBonusFn = (_: Sign | null, j: number) => maxBonus[j];
+        // Borne du bonus d'entrée des remplaçants, par slot j et signe k : même
+        // relaxation que synergyBound (meilleur signe possible par relation ;
+        // un slot non fixé peut finir vide ⇒ affinité 0 possible). Bien plus
+        // serrée que maxBonus (toutes les unités atteintes) dès que des
+        // titulaires sont fixés, ce qui élague le B&B bien avant les feuilles.
+        const bonusUb = new Float64Array(nB * 13);
+        const maxAff = new Int8Array(nS * 13);
+        const hasSign = new Array<boolean>(nS);
+        const present = new Array<boolean>(nS);
+        const signSets: number[][] = new Array(nS);
+        const benchBonusBound = (): ((sign: Sign | null, j: number) => number) => {
+            for (let o = 0; o < nS; o++) {
+                let set: number[];
+                if (fixed[o]) set = S[o] ? [signIndex(S[o]!.player.sign)] : [];
+                else {
+                    const seen = new Set<number>();
+                    for (const sp of cand[o]) {
+                        if (!used.has(nameIdx.get(sp.player.fullName)!)) seen.add(signIndex(sp.player.sign));
+                    }
+                    set = [...seen];
+                }
+                signSets[o] = set;
+                present[o] = set.length > 0;
+                hasSign[o] = set.some((l) => l !== NO_SIGN);
+                for (let k = 0; k < 13; k++) {
+                    let mx = fixed[o] ? -Infinity : 0;
+                    for (const l of set) mx = Math.max(mx, AFFINITY[k * 13 + l]);
+                    maxAff[o * 13 + k] = present[o] ? mx : 0;
+                }
+            }
+            bonusUb.fill(0);
+            for (let j = 0; j < nB; j++) {
+                const i = subOf[j];
+                if (i < 0) continue;
+                for (let k = 0; k < NO_SIGN; k++) {
+                    let units = 0;
+                    for (const idxs of courts) {
+                        if (!idxs.includes(i)) continue;
+                        const others = idxs.filter((t) => t !== i && present[t]);
+                        let subChem = 0;
+                        for (const o of others) subChem += maxAff[o * 13 + k];
+                        const chemWithSubUb = (h: number): number => {
+                            let best = -Infinity;
+                            for (const l of signSets[h]) {
+                                if (l === NO_SIGN) continue;
+                                let c = AFFINITY[l * 13 + k];
+                                for (const o of others) if (o !== h) c += maxAff[o * 13 + l];
+                                best = Math.max(best, c);
+                            }
+                            return best;
+                        };
+                        if (subCrole[j] === "setter") {
+                            for (const h of others) {
+                                if (crole[h] === "hitter" && hasSign[h] &&
+                                    subChem + chemWithSubUb(h) >= SETTER_SYNERGY_THRESHOLD) units++;
+                            }
+                        } else {
+                            if (subChem >= SIGN_ACTIVATION_THRESHOLD) units++;
+                            const setter = others.find((t) => crole[t] === "setter");
+                            if (subCrole[j] === "hitter" && setter !== undefined && hasSign[setter] &&
+                                chemWithSubUb(setter) + subChem >= SETTER_SYNERGY_THRESHOLD) units++;
+                        }
+                    }
+                    bonusUb[j * 13 + k] = Math.min(maxBonus[j], lambda * unitValue * units * phaseW);
+                }
+            }
+            return (sign, j) => bonusUb[j * 13 + signIndex(sign)];
+        };
         const assignBound = (fromSlot: number): number =>
-            assign(used, Array.from({ length: nS - fromSlot }, (_, k) => fromSlot + k), maxBonusFn).total;
+            assign(used, Array.from({ length: nS - fromSlot }, (_, k) => fromSlot + k), benchBonusBound()).total;
 
         let timedOut = false;
         let nodes = 0;
@@ -885,64 +1009,90 @@ export class LineupBuilder {
     }
 
     /**
-     * MILP joint banc + réserve à titulaires FIXÉS (relax = relaxation LP,
-     * borne supérieure). Objectif : λ·score + bonus de synergie d'entrée
-     * (remplaçants) + λᵣ·score (réservistes) ; domination remplaçant ≥
-     * réserviste par rôle (slot remplaçant vide ⇒ pas de réserviste). Pas de
-     * domination titulaire ≥ remplaçant : les titulaires sont choisis par
-     * l'objectif global (chimie comprise), un joueur écarté pour la chimie peut
-     * aller sur le banc (Δ > 0).
+     * Optimum EXACT banc + réserve à titulaires FIXÉS. Objectif : λ·score +
+     * bonus de synergie d'entrée (remplaçants) + λᵣ·score (réservistes) ;
+     * domination remplaçant ≥ réserviste par rôle (slot remplaçant vide ⇒ pas
+     * de réserviste). Pas de domination titulaire ≥ remplaçant : les
+     * titulaires sont choisis par l'objectif global (chimie comprise), un
+     * joueur écarté pour la chimie peut aller sur le banc (Δ > 0).
+     *
+     * La domination d'un rôle r équivaut à un seuil t_r : remplaçants ≥ t_r ≥
+     * réservistes. Branch & bound sur des intervalles [lo, hi] de seuils :
+     * relaxation = affectation (hongrois) avec remplaçants ≥ lo (et remplis si
+     * lo > 0) et réservistes ≤ hi ; en cas de violation (min remplaçant s <
+     * max réserviste v), on coupe en m = (s + v) / 2 : t ≤ m (réservistes ≤ m)
+     * ou t ≥ m (remplaçants ≥ m), les deux excluant la solution courante.
+     * (Le MILP yalps équivalent pouvait prendre plusieurs minutes par appel
+     * quand les scores sont proches.)
      */
     private solveBench(
         subSlotDefs: SubSlot[],
         pools:       Record<string, ScoredPlayer[]>,
         starters:    (ScoredPlayer | null)[],
-        bonus:       (sp: ScoredPlayer, j: number) => number,
-        relax:       boolean
+        bonus:       (sp: ScoredPlayer, j: number) => number
     ): { subs: (ScoredPlayer | null)[]; reserves: (ScoredPlayer | null)[]; objective: number } {
         const lambda  = LineupBuilder.subObjectiveWeight;
         const lambdaR = LineupBuilder.reserveObjectiveWeight;
+        const nB = subSlotDefs.length;
         const inS = new Set(starters.filter(Boolean).map((sp) => sp!.player.fullName));
-        const free = (j: number) => (pools[subSlotDefs[j].role] ?? []).filter((sp) => !inS.has(sp.player.fullName));
 
-        const vars: Record<string, Record<string, number>> = {};
-        const cons: Record<string, { max?: number; min?: number }> = {};
-        subSlotDefs.forEach((_, j) => {
-            cons[`su_${j}`] = { max: 1 };
-            cons[`re_${j}`] = { max: 1 };
-            for (const sp of free(j)) {
-                const nm = sp.player.fullName;
-                cons[`pl_${nm}`] = { max: 1 };
-                vars[`xb_${nm}_${j}`] = { obj: lambda * sp.score + bonus(sp, j), [`su_${j}`]: 1, [`pl_${nm}`]: 1 };
-                vars[`xr_${nm}_${j}`] = { obj: lambdaR * sp.score, [`re_${j}`]: 1, [`pl_${nm}`]: 1 };
-            }
-        });
-        subSlotDefs.forEach((dj, j) => {
-            subSlotDefs.forEach((dk, k) => {
-                if (dj.role !== dk.role) return;
-                const c = `domr_${j}_${k}`;
-                cons[c] = { min: 0 };
-                for (const sp of free(j)) vars[`xb_${sp.player.fullName}_${j}`][c] = sp.score;
-                for (const sp of free(k)) {
-                    const v = vars[`xr_${sp.player.fullName}_${k}`];
-                    v[c] = (v[c] ?? 0) - sp.score;
-                }
-            });
-        });
-
-        const sol = solve({
-            direction: "maximize", objective: "obj", constraints: cons, variables: vars,
-            binaries: !relax,
-        });
-        if (sol.status !== "optimal") {
-            return { subs: subSlotDefs.map(() => null), reserves: subSlotDefs.map(() => null), objective: -Infinity };
+        const colIdx = new Map<string, number>();
+        const free = subSlotDefs.map((d) => (pools[d.role] ?? []).filter((sp) => !inS.has(sp.player.fullName)));
+        for (const list of free) for (const sp of list) {
+            if (!colIdx.has(sp.player.fullName)) colIdx.set(sp.player.fullName, colIdx.size);
         }
-        const sel = new Map(sol.variables);
-        const pickTier = (prefix: string) => subSlotDefs.map((_, j) =>
-            free(j).find((sp) => (sel.get(`${prefix}_${sp.player.fullName}_${j}`) ?? 0) > 0.5) ?? null);
-        return relax
-            ? { subs: [], reserves: [], objective: sol.result }
-            : { subs: pickTier("xb"), reserves: pickTier("xr"), objective: sol.result };
+        const nC = colIdx.size;
+        // Joueur de la colonne c au slot j (null si inéligible au rôle).
+        const at = free.map((list) => {
+            const row: (ScoredPlayer | null)[] = new Array(nC).fill(null);
+            for (const sp of list) row[colIdx.get(sp.player.fullName)!] = sp;
+            return row;
+        });
+        const subVal = at.map((row, j) => row.map((sp) => (sp ? lambda * sp.score + bonus(sp, j) : 0)));
+
+        const roles = [...new Set(subSlotDefs.map((d) => d.role))];
+        const roleOf = subSlotDefs.map((d) => roles.indexOf(d.role));
+
+        let best = {
+            subs:     subSlotDefs.map((): ScoredPlayer | null => null),
+            reserves: subSlotDefs.map((): ScoredPlayer | null => null),
+            objective: -Infinity,
+        };
+        const node = (lo: number[], hi: number[]): void => {
+            const value: (number | null)[][] = [];
+            const required: boolean[] = [];
+            for (let j = 0; j < nB; j++) {
+                const l = lo[roleOf[j]];
+                value.push(at[j].map((sp, c) => (sp && sp.score >= l ? subVal[j][c] : null)));
+                required.push(l > 0);
+            }
+            for (let k = 0; k < nB; k++) {
+                const h = hi[roleOf[k]];
+                value.push(at[k].map((sp) => (sp && sp.score <= h ? lambdaR * sp.score : null)));
+                required.push(false);
+            }
+            const { total, colOf } = maxAssignment(value, nC, required);
+            if (total <= best.objective + 1e-9) return;
+            const subs     = subSlotDefs.map((_, j) => (colOf[j] >= 0 ? at[j][colOf[j]] : null));
+            const reserves = subSlotDefs.map((_, k) => (colOf[nB + k] >= 0 ? at[k][colOf[nB + k]] : null));
+
+            // Rôle le plus en violation de la domination (remplaçant vide = 0).
+            let worst = -1, cut = 0, gap = 1e-9;
+            roles.forEach((_, r) => {
+                let sMin = Infinity, vMax = -Infinity;
+                for (let j = 0; j < nB; j++) {
+                    if (roleOf[j] !== r) continue;
+                    sMin = Math.min(sMin, subs[j]?.score ?? 0);
+                    if (reserves[j]) vMax = Math.max(vMax, reserves[j]!.score);
+                }
+                if (vMax - sMin > gap) { gap = vMax - sMin; worst = r; cut = (sMin + vMax) / 2; }
+            });
+            if (worst < 0) { best = { subs, reserves, objective: total }; return; }
+            node(lo, hi.map((h, r) => (r === worst ? Math.min(h, cut) : h)));
+            node(lo.map((l, r) => (r === worst ? Math.max(l, cut) : l)), hi);
+        };
+        node(roles.map(() => -Infinity), roles.map(() => Infinity));
+        return best;
     }
 
 
