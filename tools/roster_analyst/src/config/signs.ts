@@ -90,14 +90,6 @@ export const SIGN_ACTIVATION_THRESHOLD = 3;
 /** Threshold chemistry(setter) + chemistry(attacker) for the best connection. */
 export const SETTER_SYNERGY_THRESHOLD = 3;
 
-/**
- * Win gain of a PERFECT synergy for the team (all effects
- * active + all setter-attacker connections): +10 %. Used to calibrate
- * the synergy weight in the 5-1 MILP (10 % of the sum of the
- * starters' scores) and the "≈ +x % win" display.
- */
-export const SIGN_SYNERGY_MAX_WIN_GAIN = 0.10;
-
 /** Libero effect per sign (3 groups). */
 export const LIBERO_SIGN_EFFECT: Record<Sign, string> = {
     Taurus: "energy", Leo: "energy", Scorpio: "energy", Aquarius: "energy",

@@ -12,7 +12,7 @@
  *   - activation of each non-setter's sign (chemistry ≥ 3): 5;
  *   - setter ↔ attacker connection (OH, OP, MB): chemistry(setter) +
  *     chemistry(attacker) ≥ 3: 4.
- * Perfect synergy = 9 units in both phases ⇒ +10 % win.
+ * Perfect synergy = 9 units in both phases ⇒ +settings.lineup.perfectSynergyWinPct % win.
  */
 
 import { RoleName, Sign, ScoredPlayer } from "../types";
@@ -21,8 +21,8 @@ import {
     chemistryOf,
     SIGN_ACTIVATION_THRESHOLD,
     SETTER_SYNERGY_THRESHOLD,
-    SIGN_SYNERGY_MAX_WIN_GAIN,
 } from "../config/signs";
+import { SETTINGS } from "../config/settings";
 
 export type CourtRole = "setter" | "hitter" | "libero";
 
@@ -51,6 +51,11 @@ export const FIVE_ONE_SLOT_ROLES: Record<string, RoleName> = {
 
 /** Maximum units per phase (5 activations + 4 connections). */
 export const UNITS_PER_PHASE = 9;
+
+/** Win gain (fraction) of a perfect synergy (settings.lineup.perfectSynergyWinPct). */
+export function perfectSynergyWinGain(): number {
+    return SETTINGS.lineup.perfectSynergyWinPct / 100;
+}
 
 export interface CourtMember {
     key: string;
@@ -112,7 +117,7 @@ export interface ChemistryAnalysis {
     /** Units reached (average of the 2 phases, 0-9). */
     units: number;
     ratio: number;
-    /** Estimated win gain (ratio × 10 %). */
+    /** Estimated win gain (ratio × perfect synergy gain). */
     winGain: number;
 }
 
@@ -155,7 +160,7 @@ export function analyzeChemistry(lineup: Lineup, order: string[]): ChemistryAnal
     });
     const units = evals.reduce((s, e) => s + e.units, 0) / evals.length;
     const ratio = units / UNITS_PER_PHASE;
-    return { hasSigns, starters, units, ratio, winGain: ratio * SIGN_SYNERGY_MAX_WIN_GAIN };
+    return { hasSigns, starters, units, ratio, winGain: ratio * perfectSynergyWinGain() };
 }
 
 // ─── Shared formatting (console + markdown) ──────────────────────────────────
