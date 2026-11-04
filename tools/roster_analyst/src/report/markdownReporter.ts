@@ -218,10 +218,10 @@ export class MarkdownReporter implements Reporter {
         a.starters.forEach((s, i) => {
             this.push(
                 `| ${i + 1} | ${s.slot} | ${s.name ?? "—"} | ${fmtSign(s)} | ${fmtChem(s.chem)} | ` +
-                `${fmtOn(s.active)} | ${fmtOn(s.connected)} |`
+                `${fmtOn(s.active, s.signGain)} | ${fmtOn(s.connected, s.connectionGain)} |`
             );
         });
-        this.push("", "*Chemistry: front-MB phase / back-MB phase (the libero replaces the back MB) · ✓ active · ½ one phase out of two · ✗ inactive.*");
+        this.push("", "*Chemistry over the 7 starters (both MBs and the libero included) · ✓ active (+x: points earned — sign bonus, setter connection) · ✗ inactive.*");
         this.closeBlock();
     }
 

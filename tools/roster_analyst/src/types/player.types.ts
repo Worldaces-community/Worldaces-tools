@@ -59,5 +59,16 @@ export interface Player {
 
 export interface ScoredPlayer {
     player: Player;
+    /** Score with the sign effect assumed active (0-99 scale). */
     score: number;
+    /**
+     * Part of `score` due to the sign bonus (same scale): it only counts when
+     * the effect is active in the lineup (chemistry ≥ 3, see lineupBuilder).
+     */
+    signScore: number;
+    /**
+     * Value of one setter ↔ attacker connection (setter role only, same
+     * scale; 0 otherwise). Not included in `score`: earned per connected attacker.
+     */
+    connectionScore: number;
 }

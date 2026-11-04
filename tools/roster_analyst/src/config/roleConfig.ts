@@ -62,8 +62,8 @@ export function normalizeParams(input: unknown): Params {
         cfg.traitBonuses ??= {};
         cfg.signBonuses ??= {};
     }
-    // traitWeight: global multiplier of the traitBonuses (weight of traits
-    // vs stats), applied once here → scorer, idealScore, recruitment
+    // traitWeight: global multiplier of the traitBonuses (rating × weight =
+    // points added), applied once here → scorer, idealScore, recruitment
     // and --verbose display all see the effective bonuses.
     const tw = params.traitWeight ?? 1;
     if (tw !== 1) {
@@ -71,6 +71,28 @@ export function normalizeParams(input: unknown): Params {
             for (const t of Object.keys(config.traitBonuses)) {
                 config.traitBonuses[t] = Math.round(config.traitBonuses[t] * tw * 100) / 100;
             }
+        }
+    }
+    // The setter activates no sign effect: their chemistry value is the
+    // connection with the attackers (connectionBonus) — and only theirs.
+    if (Object.values(params.roles.setter.signBonuses ?? {}).some((v) => v !== 0)) {
+        console.warn("⚠️  roles.setter.signBonuses: the setter activates no sign effect — ignored (see connectionBonus).");
+    }
+    params.roles.setter.signBonuses = {};
+    for (const role of ROLE_NAMES) {
+        if (role !== "setter" && params.roles[role].connectionBonus) {
+            console.warn(`⚠️  roles.${role}.connectionBonus: setter only — ignored.`);
+        }
+        if (role !== "setter") delete params.roles[role].connectionBonus;
+    }
+    // signWeight: global multiplier of the signBonuses and connectionBonus
+    // (rating × weight = points), applied once here like traitWeight.
+    const sw = params.signWeight ?? 1;
+    if (sw !== 1) {
+        const scale = (v: number) => Math.round(v * sw * 100) / 100;
+        for (const config of Object.values(params.roles)) {
+            for (const s of Object.keys(config.signBonuses!)) config.signBonuses![s] = scale(config.signBonuses![s]);
+            if (config.connectionBonus) config.connectionBonus = scale(config.connectionBonus);
         }
     }
     const settings = resolveSettings(params.settings);

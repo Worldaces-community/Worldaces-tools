@@ -29,13 +29,6 @@ export interface Settings {
         signSynergy: boolean;
         /** Safety limit of the synergy branch & bound (seconds). */
         synergyTimeLimitSec: number;
-        /**
-         * Win-chance gain (%) of a PERFECT synergy (all effects active +
-         * all setter-attacker connections). Calibrates the chemistry weight
-         * in the 5-1 objective (this % of the starters' score sum), the
-         * sign recruitment and the "≈ +x % win" display.
-         */
-        perfectSynergyWinPct: number;
     };
 
     availability: {
@@ -95,7 +88,6 @@ export const DEFAULT_SETTINGS: Settings = {
         reserveObjectiveWeight: 0.25,
         signSynergy: true,
         synergyTimeLimitSec: 300,
-        perfectSynergyWinPct: 10,
     },
     availability: {
         declineExceptionalMinGain: 5,
@@ -149,6 +141,7 @@ function merge(base: Record<string, unknown>, override: unknown, path: string, f
     for (const [k, v] of Object.entries(override)) {
         const p = path ? `${path}.${k}` : k;
         if (k.startsWith("_")) continue; // comments
+        if (REMOVED_SETTINGS.has(p)) continue; // older files: silently dropped
         if (!(k in base)) {
             console.warn(`⚠️  settings.${p}: unknown setting, ignored.`);
             continue;
@@ -169,6 +162,9 @@ function merge(base: Record<string, unknown>, override: unknown, path: string, f
         }
     }
 }
+
+/** Settings that no longer exist (replaced by signWeight + setter connectionBonus). */
+const REMOVED_SETTINGS = new Set(["lineup.perfectSynergyWinPct"]);
 
 const FREE_KEYS = new Set(["roster.targetCounts", "recruitment.singletonTraitPositions"]);
 

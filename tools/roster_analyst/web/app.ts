@@ -12,8 +12,8 @@ import { hasRole } from "../src/utils/helpers";
 import type { Player, Sign } from "../src/types";
 import {
     EditableParams, ROLES, ROLE_TITLES, STATS, TRAITS, SIGNS, RANGES,
-    neutralParams, importParams, exportParams,
-    STAT_HELP, TRAIT_HELP, SIGN_HELP, LIBERO_SIGN_HELP, SETTER_SIGN_HELP,
+    defaultParams, importParams, exportParams,
+    STAT_HELP, TRAIT_HELP, SIGN_HELP, LIBERO_SIGN_HELP, SETTER_SIGN_HELP, CONNECTION_HELP,
 } from "./schema";
 import type { WorkerMessage, WorkerRequest } from "./worker";
 import type { RoleName } from "../src/types";
@@ -105,7 +105,7 @@ function download(name: string, text: string, type: string): void {
 
 const STORE_KEY = "wa-roster-analyst:params";
 const restored = loadStored();
-let params: EditableParams = restored ?? neutralParams();
+let params: EditableParams = restored ?? defaultParams();
 let activeRole: RoleName = "setter";
 let saveTimer: number | undefined;
 
@@ -136,8 +136,13 @@ function renderGlobal(): void {
     box.replaceChildren(
         slider({
             label: "Trait weight", min: 0, max: 3, step: 0.05,
-            help: "Multiplies every trait bonus — how much traits count against stats.",
+            help: "Multiplies every trait bonus (a trait rated 5 adds 5 × this weight points). Not a share of the score — see “How a player's score is computed”.",
             get: () => params.traitWeight, set: (v) => (params.traitWeight = v),
+        }),
+        slider({
+            label: "Sign weight", min: 0, max: 3, step: 0.05,
+            help: "Multiplies every sign bonus and the setter's connection bonus (a sign rated 5 adds 5 × this weight points, only when its effect is active). Not a share of the score — see “How a player's score is computed”.",
+            get: () => params.signWeight, set: (v) => (params.signWeight = v),
         }),
         slider({
             label: "Balance exponent", min: 0.1, max: 1, step: 0.05,
@@ -166,15 +171,17 @@ function renderRoleTabs(): void {
     });
     const reset = el("button", { type: "button", class: "secondary small" }, "Reset this role");
     reset.addEventListener("click", () => {
-        params.roles[activeRole] = neutralParams().roles[activeRole];
+        params.roles[activeRole] = defaultParams().roles[activeRole];
         changed(); renderRolePanel();
     });
     $("roleTools").replaceChildren(copy, reset);
 }
 
-function group(title: string, hint: string, controls: HTMLElement[]): HTMLElement {
+function group(title: string, hint: string, controls: HTMLElement[], tip?: string): HTMLElement {
     return el("div", { class: "group" },
-        el("h4", {}, title, el("span", { class: "hint" }, ` — ${hint}`)),
+        el("h4", {}, title,
+            tip ? el("span", { class: "help-tip", title: tip, tabindex: "0", role: "img", "aria-label": tip }, "?") : null,
+            el("span", { class: "hint" }, ` — ${hint}`)),
         el("div", { class: "grid3" }, ...controls));
 }
 
@@ -189,16 +196,22 @@ function renderRolePanel(): void {
         label: t, help: TRAIT_HELP[t], ...RANGES.trait, compact: true,
         get: () => cfg.traitBonuses[t] ?? 0, set: (v) => (cfg.traitBonuses[t] = v),
     }));
-    const signCtl = SIGNS.map((s) => slider({
-        label: s,
-        help: role === "libero" ? LIBERO_SIGN_HELP[s] : role === "setter" ? SETTER_SIGN_HELP : SIGN_HELP[s],
-        ...RANGES.sign, compact: true,
-        get: () => cfg.signBonuses[s] ?? 0, set: (v) => (cfg.signBonuses[s] = v),
-    }));
+    // The setter activates no sign effect: a single connection rating instead.
+    const chemistryGroup = role === "setter"
+        ? group("Setter connection", "points per attacker connected with the setter", [slider({
+            label: "Connection bonus", help: CONNECTION_HELP, ...RANGES.connection, compact: true,
+            get: () => cfg.connectionBonus ?? 0, set: (v) => (cfg.connectionBonus = v),
+        })], SETTER_SIGN_HELP)
+        : group("Sign bonuses", "value of the sign effect for this role, counted only when it is active", SIGNS.map((s) => slider({
+            label: s,
+            help: role === "libero" ? LIBERO_SIGN_HELP[s] : SIGN_HELP[s],
+            ...RANGES.sign, compact: true,
+            get: () => cfg.signBonuses[s] ?? 0, set: (v) => (cfg.signBonuses[s] = v),
+        })));
     $("rolePanel").replaceChildren(
         group("Stat weights", "0 = ignored, 10 = key stat; only the ratios matter (hover a name for its in-game effect)", statCtl),
         group("Trait bonuses", "points added to the 0-99 stat score when the player has the trait (negative = harmful)", traitCtl),
-        group("Sign bonuses", "value of the sign effect for this role, assuming it is active", signCtl),
+        chemistryGroup,
     );
 }
 
@@ -269,9 +282,6 @@ function renderAdvanced(): void {
             numberField({ label: "Chemistry search time limit (s)", min: 5, step: 5,
                 help: "Past this limit the best lineup found so far is kept (optimality not proven).",
                 get: () => s.lineup.synergyTimeLimitSec, set: (v) => (s.lineup.synergyTimeLimitSec = v) }),
-            numberField({ label: "Perfect chemistry win gain (%)", min: 0, step: 1,
-                help: "Win-chance gain of a perfect sign chemistry. Sets how much chemistry weighs against the starters' scores in the lineup (and in sign recruitment).",
-                get: () => s.lineup.perfectSynergyWinPct, set: (v) => (s.lineup.perfectSynergyWinPct = v) }),
         ),
         sec("Progression & academy",
             numberField({ label: "Decliner kept if lineup gain ≥", min: 0, step: 0.5,
@@ -341,11 +351,11 @@ $("exportParams").addEventListener("click", () => {
 });
 
 $("resetParams").addEventListener("click", () => {
-    if (!confirm("Replace the current settings with the neutral template?")) return;
-    params = neutralParams();
+    if (!confirm("Replace the current settings with the default profile?")) return;
+    params = defaultParams();
     changed();
     renderEditor();
-    setStatus("Neutral template loaded.");
+    setStatus("Default profile loaded: every stat, trait and sign rated 2 (minor), 5 (useful) or 8 (key) per role.");
 });
 
 // ─── 2. Roster ──────────────────────────────────────────────────────────────

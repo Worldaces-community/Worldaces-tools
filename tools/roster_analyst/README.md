@@ -92,10 +92,11 @@ ignored.
 ```jsonc
 {
   "traitWeight": 1,          // multiplies every trait bonus
+  "signWeight": 1,           // multiplies every sign bonus and the setter's connection bonus
   "settings": { ... },       // analysis thresholds — optional, defaults otherwise
   "roles": {
-    "setter":         { "statsWeights": {...}, "traitBonuses": {...}, "signBonuses": {...} },
-    "outsideHitter":  { ... },
+    "setter":         { "statsWeights": {...}, "traitBonuses": {...}, "connectionBonus": 0 },
+    "outsideHitter":  { "statsWeights": {...}, "traitBonuses": {...}, "signBonuses": {...} },
     "middleBlocker":  { ... },
     "oppositeHitter": { ... },
     "libero":         { ... }
@@ -105,11 +106,16 @@ ignored.
 
 - `statsWeights` — 0-10 per sub-stat; they are normalised, only the ratios matter.
   For `read block`/`commit block` and `quick`/`power` only the player's better stat counts.
-- `traitBonuses` / `signBonuses` — points added to the 0-99 stat score (negative allowed).
+- `traitBonuses` / `signBonuses` — points added to the 0-99 stat score (negative allowed). A
+  sign bonus only counts in the lineup when the sign effect is active (chemistry ≥ 3).
+- `connectionBonus` (setter only — the setter activates no sign effect) — points earned per
+  attacker connected with the setter (their chemistry + the setter's ≥ 3).
 - `settings` — see the table in [DESIGN.md](./DESIGN.md#settings-settings).
 
-[`example_params.json`](./example_params.json) is the neutral template of the editor (all
-stats equal, no bonuses) — a starting point, not a recommendation.
+[`example_params.json`](./example_params.json) is the default profile of the editor:
+every stat, trait and sign rated 2 (minor), 5 (useful) or 8 (key) per role, 0 when it cannot
+trigger in the role, setter connection 5. A coherent first take to show what the tool does, not a
+tuned recommendation (*Reset to default* in the editor reloads it).
 
 ## How it works
 

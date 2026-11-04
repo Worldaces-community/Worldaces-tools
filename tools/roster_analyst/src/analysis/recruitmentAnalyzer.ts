@@ -8,7 +8,7 @@ import { Player, RoleName, ScoredPlayer, Params } from "../types";
 import { ALL_TRAITS, SETTINGS } from "../config";
 import { REDUNDANT_TRAIT_GROUPS, idealScore } from "../config/roleConfig";
 import { ALL_SIGNS } from "../config/signs";
-import { lineupUnits, perfectSynergyWinGain, UNITS_PER_PHASE } from "../lineup/signChemistry";
+import { evaluateLineup, lineupChemValue } from "../lineup/signChemistry";
 import { Sign } from "../types";
 import { analyzeWeaknesses } from "./weaknessAnalyzer";
 import { SubSlot, Substitute } from "../lineup";
@@ -169,10 +169,11 @@ export function analyzeRecruitment(
  * 3 signs to recruit: for each sign and each targeted role, replace
  * the role's weakest starter with a recruit of the same score carrying this
  * sign, and sum
- *   - the role's sign bonus (normalized 0-99, see scorer);
- *   - the change in starters' synergy (chemistry units gained /
- *     lost × value of one unit: perfect synergy = perfectSynergyWinPct % of the sum of the
- *     starters' scores, as in the 5-1 MILP).
+ *   - the role's sign bonus (normalized 0-99, see scorer), only if the
+ *     recruit's sign effect would be active (the setter has none);
+ *   - the change in the starters' chemistry value, as in the 5-1 objective
+ *     (setter ↔ attacker connections, sign bonus the other starters lose to
+ *     inactive effects).
  */
 export function selectSigns(
     lineup: Record<string, ScoredPlayer | null>,
@@ -181,9 +182,7 @@ export function selectSigns(
 ): SignUrgency[] {
     if (!Object.values(lineup).some((sp) => sp?.player.sign)) return [];
 
-    const starterSum = Object.values(lineup).reduce((s, sp) => s + (sp?.score ?? 0), 0);
-    const unitValue = (perfectSynergyWinGain() * starterSum) / UNITS_PER_PHASE;
-    const baseUnits = lineupUnits(lineup);
+    const baseChem = lineupChemValue(lineup);
 
     // Targeted slot per role: the weakest starter (empty slot first).
     const targetSlot = new Map<RoleName, string>();
@@ -206,12 +205,19 @@ export function selectSigns(
             const recruit: ScoredPlayer = {
                 player: { ...(cur?.player ?? ({} as Player)), sign, fullName: "__recruit__" },
                 score: cur?.score ?? 0,
+                // Own sign bonus counted below (only if active).
+                signScore: 0,
+                connectionScore: cur?.connectionScore ?? 0,
             };
-            const dUnits = lineupUnits({ ...lineup, [slot]: recruit }) - baseUnits;
-            urgency += bonusPts + dUnits * unitValue;
+            const next = { ...lineup, [slot]: recruit };
+            const ev = evaluateLineup(next);
+            const active = ev.active.get(slot) === true;
+            const dChem = lineupChemValue(next, ev) - baseChem;
+            urgency += (active ? bonusPts : 0) + dChem;
             const bits: string[] = [];
-            if (bonus) bits.push(`bonus +${bonus}`);
-            if (dUnits) bits.push(`chemistry ${dUnits > 0 ? "+" : ""}${dUnits.toFixed(1)}`);
+            const b = bonus > 0 ? `+${bonus}` : `${bonus}`;
+            if (bonus) bits.push(active ? `bonus ${b}` : `bonus ${b} inactive`);
+            if (Math.abs(dChem) >= 0.05) bits.push(`chemistry ${dChem > 0 ? "+" : "−"}${Math.abs(dChem).toFixed(1)}`);
             if (bits.length) parts.push(`${ROLE_SIGLES[role]} ${bits.join(", ")}`);
         }
         return {

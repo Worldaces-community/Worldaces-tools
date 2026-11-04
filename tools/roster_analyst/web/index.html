@@ -33,15 +33,41 @@
         <label class="btn secondary" for="paramsFile">Import params.json</label>
         <input id="paramsFile" type="file" accept=".json,application/json" hidden>
         <button id="exportParams" type="button">Export params.json</button>
-        <button id="resetParams" type="button" class="secondary">Reset to neutral</button>
+        <button id="resetParams" type="button" class="secondary">Reset to default</button>
       </div>
     </header>
-    <p class="hint" id="paramsStatus">Neutral template loaded: every stat weighs the same and no trait or sign gives a bonus.
-      Tune it, then export your <code>params.json</code> to reuse it next time.</p>
+    <p class="hint" id="paramsStatus">Default profile loaded: every stat, trait and sign is rated 2 (minor), 5 (useful)
+      or 8 (key) for each role (0 when it cannot trigger in that role). It is a first take, not a tuned profile:
+      adjust it to your own view, then export your <code>params.json</code> to reuse it next time.</p>
 
     <div class="card">
       <h3>Global</h3>
       <div class="grid2" id="globalControls"></div>
+      <details class="explain">
+        <summary>How a player's score is computed</summary>
+        <ol>
+          <li><b>Stats</b>: average of the sub-stats, weighted by the role's stat weights → 0-99.
+            <i>Balance exponent</i> p turns it into a power mean (Σ weight × stat<sup>p</sup>)<sup>1/p</sup>:
+            at 1 it is the plain weighted average; below 1 low stats drag the score down more, which
+            favours balanced profiles. Two equally weighted stats at 90 and 30 give 60 at p = 1 and
+            ≈ 56 at p = 0.5, while 60 and 60 give 60 either way.</li>
+          <li><b>Traits</b>: each trait the player has adds its bonus × <i>Trait weight</i>, in points.</li>
+          <li><b>Sign</b>: the player's sign adds its bonus × <i>Sign weight</i>, in points. In the lineup
+            it only counts when the sign effect is active (chemistry ≥ 3 with the 6 other starters).</li>
+          <li>The total is rescaled so that the role's best possible player (99 in every weighted stat,
+            the role's 4 best traits, its best sign) scores 99.</li>
+        </ol>
+        <p>Example: stats 70, two traits rated 5 and 3, a sign rated 4 (both weights at 1), role ceiling
+          99 + 20 (4 best traits) + 6 (best sign) = 125 → (70 + 8 + 4) / 125 × 99 ≈ 65.</p>
+        <p><b>Setter connection</b>: the setter activates no sign effect. Their connection bonus
+          × <i>Sign weight</i>, rescaled the same way, is added to the lineup for each attacker connected
+          with the setter (up to 5). It is not part of the setter's own score.</p>
+        <p><b>The weights multiply the bonuses, they are not shares of the score.</b> With Trait weight 2
+          and Sign weight 0.5, a trait rated 5 adds 10 points and a sign rated 5 adds 2.5: at equal rating a
+          sign is worth 4× less than one trait (2 / 0.5). What they really weigh also depends on your
+          ratings, on the count (up to 4 traits, a single sign) and on activation (a sign counts only when
+          active). Raising a weight also raises the role's ceiling, so the stats weigh a little less.</p>
+      </details>
     </div>
 
     <div class="card">
