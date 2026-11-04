@@ -14,7 +14,7 @@ import { AvailabilityResult } from "../analysis/availabilityAnalyzer";
 import { AcademyAnalysis, AcademyMove } from "../analysis/academyAnalyzer";
 import { SETTINGS } from "../config/settings";
 import { Reporter } from "./reporter";
-import { ChemistryAnalysis, fmtChem, fmtChemVerdict, fmtOn, fmtSign } from "../lineup/signChemistry";
+import { ChemistryAnalysis, evaluateLineup, fmtChem, fmtChemVerdict, fmtOn, fmtSign, lostSignScore } from "../lineup/signChemistry";
 import { formatPlayer, fmtScoreParts, fmtScoreShares, createBox, rarityName, padEndAnsi, paint, HR, HR2 } from "./formatters";
 import { ROLE_LABELS } from "../config/constants";
 
@@ -149,7 +149,9 @@ export class ConsoleReporter implements Reporter {
         });
         console.log("\n" + createBox(recapLines, 80).join("\n"));
 
-        // Starters — numbered by court position (serving order).
+        // Starters — numbered by court position (serving order). Score as
+        // counted in this lineup: an inactive sign effect adds nothing.
+        const ev = evaluateLineup(lineup);
         const starterLines: string[] = [];
         lineupOrder.forEach((slot, i) => {
             const pos = `${i + 1}.`;
@@ -159,13 +161,16 @@ export class ConsoleReporter implements Reporter {
                 return;
             }
             const p = s.player;
+            const lost = lostSignScore(lineup, ev, slot);
+            const score = s.score - lost;
             starterLines.push(
                 `  ${pos} ${slot.padEnd(20)} ${p.fullName.padEnd(24)} ` +
                 `${padEndAnsi(rarityName(p.rarity as Rarity), 10)} ` +
-                `Score: ${scoreColor(s.score)(s.score.toFixed(0).padStart(3))}  ` +
-                paint.dim(`(${fmtScoreParts(s, slot !== "Setter")})`)
+                `Score: ${scoreColor(score)(score.toFixed(0).padStart(3))}  ` +
+                paint.dim(`(${fmtScoreParts(s, slot !== "Setter", lost === 0)})`)
             );
         });
+        starterLines.push(paint.dim("  Score as counted in this lineup: a sign adds points only when its effect is active (✗ = inactive)."));
         console.log("\n" + createBox([paint.bold("  STARTERS"), ...starterLines], 80).join("\n"));
 
         // Bench — same position order as the starters.

@@ -24,7 +24,7 @@ import { AcademyAnalysis, AcademyMove } from "../analysis/academyAnalyzer";
 import { SETTINGS } from "../config/settings";
 import { Reporter } from "./reporter";
 import { fmtScoreParts, fmtScoreShares } from "./formatters";
-import { ChemistryAnalysis, fmtChem, fmtChemVerdict, fmtOn, fmtSign } from "../lineup/signChemistry";
+import { ChemistryAnalysis, evaluateLineup, fmtChem, fmtChemVerdict, fmtOn, fmtSign, lostSignScore } from "../lineup/signChemistry";
 import { ROLE_LABELS } from "../config/constants";
 
 /** Compact rarity icon (no color in markdown). */
@@ -175,14 +175,19 @@ export class MarkdownReporter implements Reporter {
         this.openBlock("Starters (rarity & score)");
         this.push("| # | Position | Player | Rarity | Score | Breakdown |");
         this.push("|--:|---|---|---|--:|---|");
+        // Score as counted in this lineup: an inactive sign effect adds nothing.
+        const ev = evaluateLineup(lineup);
         lineupOrder.forEach((slot, i) => {
             const s = lineup[slot];
+            const lost = s ? lostSignScore(lineup, ev, slot) : 0;
             this.push(
                 s
-                    ? `| ${i + 1} | ${slot} | **${s.player.fullName}** | ${rarity(s.player.rarity as Rarity)} | ${scoreBadge(s.score)} | ${fmtScoreParts(s, slot !== "Setter")} |`
+                    ? `| ${i + 1} | ${slot} | **${s.player.fullName}** | ${rarity(s.player.rarity as Rarity)} | ` +
+                      `${scoreBadge(s.score - lost)} | ${fmtScoreParts(s, slot !== "Setter", lost === 0)} |`
                     : `| ${i + 1} | ${slot} | ⚠️ *no eligible player* | — | — | — |`
             );
         });
+        this.push("", "*Score as counted in this lineup: a sign adds points only when its effect is active (✗ = inactive).*");
         this.closeBlock();
 
         this.openBlock("Bench (rarity & score)");

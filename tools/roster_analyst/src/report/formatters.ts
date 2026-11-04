@@ -109,13 +109,14 @@ export function rarityName(rarity: Rarity): string {
 
 /**
  * Points of the score due to the stats, traits and sign (they add up to the
- * score; the sign part assumes its effect active). `withSign` false for the
- * setter (no sign effect).
+ * score; the sign part assumes its effect active unless `signActive` is
+ * false: it then counts 0, marked ✗). `withSign` false for the setter (no
+ * sign effect).
  */
-export function fmtScoreParts(s: ScoredPlayer, withSign = true): string {
+export function fmtScoreParts(s: ScoredPlayer, withSign = true, signActive = true): string {
     const n = (v: number) => v.toFixed(1).padStart(4);
     const parts = [`stats ${n(s.statScore)}`, `traits ${n(s.traitScore)}`];
-    if (withSign) parts.push(`sign ${n(s.signScore)}`);
+    if (withSign) parts.push(signActive ? `sign ${n(s.signScore)}` : `sign ${n(0)} ✗`);
     return parts.join(" · ");
 }
 

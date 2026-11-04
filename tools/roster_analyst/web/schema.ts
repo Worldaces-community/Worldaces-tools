@@ -5,9 +5,9 @@
  */
 
 import { ALL_STATS, ALL_TRAITS } from "../src/config/constants";
-import { ALL_SIGNS } from "../src/config/signs";
+import { ALL_SIGNS, LIBERO_SIGN_EFFECT } from "../src/config/signs";
 import { DEFAULT_SETTINGS, Settings } from "../src/config/settings";
-import type { RoleName } from "../src/types";
+import type { RoleName, Sign } from "../src/types";
 import starter from "../example_params.json";
 
 export const ROLES: RoleName[] = ["setter", "outsideHitter", "middleBlocker", "oppositeHitter", "libero"];
@@ -139,6 +139,17 @@ export function importParams(raw: unknown): { params: EditableParams; notes: str
         if (!(ROLES as string[]).includes(role)) { notes.push(`unknown role "${role}" ignored`); continue; }
         mergeKnown(p.roles[role as RoleName] as unknown as Record<string, unknown>, cfg, new Set(), `roles.${role}`, notes);
     }
+    // The editor rates the libero's signs per effect: a group rated unevenly
+    // in the file is aligned on its highest rating.
+    const libero = p.roles.libero.signBonuses;
+    for (const g of LIBERO_SIGN_GROUPS) {
+        const vals = g.signs.map((s) => libero[s] ?? 0);
+        if (vals.some((v) => v !== vals[0])) {
+            const max = Math.max(...vals);
+            for (const s of g.signs) libero[s] = max;
+            notes.push(`libero signs ${g.signs.join(", ")} share the "${g.effect}" effect: all set to ${max}`);
+        }
+    }
     return { params: p, notes };
 }
 
@@ -220,6 +231,16 @@ export const LIBERO_SIGN_HELP: Record<string, string> = {
     Libra: "Takes every ball they contest with a teammate, and nobody gets confused.",
     Capricorn: "Takes every ball they contest with a teammate, and nobody gets confused.",
 };
+
+/**
+ * Libero signs grouped by effect (4 signs share each effect): the editor shows
+ * one slider per group, which sets the bonus of its 4 signs.
+ */
+export const LIBERO_SIGN_GROUPS: { effect: string; signs: string[]; help: string }[] =
+    [...new Set(SIGNS.map((s) => LIBERO_SIGN_EFFECT[s as Sign]))].map((effect) => {
+        const signs = SIGNS.filter((s) => LIBERO_SIGN_EFFECT[s as Sign] === effect);
+        return { effect, signs, help: LIBERO_SIGN_HELP[signs[0]] };
+    });
 
 export const SETTER_SIGN_HELP = "The setter does not activate any sign effect, so their signs cannot be rated. Instead, on every set they calculate their synergy with the hitter, adding the setter's and the hitter's chemistry values together. If the combination is 3 or more, they have a higher chance to connect; below that, nothing changes.";
 
