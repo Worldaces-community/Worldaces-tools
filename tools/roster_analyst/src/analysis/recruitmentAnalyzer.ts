@@ -205,6 +205,8 @@ export function selectSigns(
             const recruit: ScoredPlayer = {
                 player: { ...(cur?.player ?? ({} as Player)), sign, fullName: "__recruit__" },
                 score: cur?.score ?? 0,
+                statScore: cur?.statScore ?? 0,
+                traitScore: cur?.traitScore ?? 0,
                 // Own sign bonus counted below (only if active).
                 signScore: 0,
                 connectionScore: cur?.connectionScore ?? 0,

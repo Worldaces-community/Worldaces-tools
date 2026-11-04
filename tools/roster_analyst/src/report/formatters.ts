@@ -108,11 +108,38 @@ export function rarityName(rarity: Rarity): string {
 }
 
 /**
+ * Points of the score due to the stats, traits and sign (they add up to the
+ * score; the sign part assumes its effect active). `withSign` false for the
+ * setter (no sign effect).
+ */
+export function fmtScoreParts(s: ScoredPlayer, withSign = true): string {
+    const n = (v: number) => v.toFixed(1).padStart(4);
+    const parts = [`stats ${n(s.statScore)}`, `traits ${n(s.traitScore)}`];
+    if (withSign) parts.push(`sign ${n(s.signScore)}`);
+    return parts.join(" · ");
+}
+
+/**
+ * Average share of the score due to the stats, traits and sign over `players`
+ * (e.g. a role's top 10) — shows what traitWeight / signWeight really weigh.
+ */
+export function fmtScoreShares(players: ScoredPlayer[], withSign = true): string {
+    const sum = (f: (s: ScoredPlayer) => number) => players.reduce((a, s) => a + f(s), 0);
+    const total = sum((s) => s.score);
+    if (!players.length || total <= 0) return "—";
+    const pct = (v: number) => `${Math.round((v / total) * 100)}%`;
+    const parts = [`stats ${pct(sum((s) => s.statScore))}`, `traits ${pct(sum((s) => s.traitScore))}`];
+    if (withSign) parts.push(`sign ${pct(sum((s) => s.signScore))}`);
+    return parts.join(" · ");
+}
+
+/**
  * Format a scored player for display (ranking line).
  */
-export function formatPlayer(s: ScoredPlayer, rank: number): string {
+export function formatPlayer(s: ScoredPlayer, rank: number, withSign = true): string {
     const p = s.player;
     const traits = p.traits.length ? paint.dim(` [${p.traits.join(", ")}]`) : "";
     return `  ${String(rank).padStart(2)}. ${rarityIcon(p.rarity)} ${p.fullName.padEnd(26)} ` +
-           `Score: ${paint.bold(s.score.toFixed(1).padStart(5))}  Age: ${p.age}${traits}`;
+           `Score: ${paint.bold(s.score.toFixed(1).padStart(5))} ` +
+           `${paint.dim(`(${fmtScoreParts(s, withSign)})`)}  Age: ${p.age}${traits}`;
 }

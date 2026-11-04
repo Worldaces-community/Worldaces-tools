@@ -41,7 +41,7 @@ console.log = (...args: unknown[]) => ctx.postMessage({ type: "log", level: "inf
 function spawnRunners(csvText: string, rawParams: unknown): ((job: number[]) => Promise<SerializedLineup>)[] {
     const n = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 2) - 1));
     return Array.from({ length: n }, () => {
-        const w = new Worker("lineupWorker.js");
+        const w = new Worker(`lineupWorker.js?v=${__BUILD_ID__}`);
         const pending = new Map<number, { resolve: (l: SerializedLineup) => void; reject: (e: Error) => void }>();
         let nextId = 0;
         w.onmessage = (ev: MessageEvent<LineupWorkerMessage>) => {
