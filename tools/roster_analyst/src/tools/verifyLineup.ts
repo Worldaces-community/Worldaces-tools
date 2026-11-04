@@ -6,7 +6,7 @@ import { solve } from "yalps";
 import * as fs from "fs";
 import { parseCSVText } from "../models"; import { parseParams } from "../config";
 import { rankAll } from "../analysis/availabilityAnalyzer"; import { LineupBuilder } from "../lineup/lineupBuilder";
-import { lineupUnits, evaluateCourt, courtRoleOf, FIVE_ONE_COURTS, FIVE_ONE_SLOT_ROLES } from "../lineup/signChemistry";
+import { lineupChemValue, evaluateCourt, courtRoleOf, FIVE_ONE_COURT, FIVE_ONE_SLOT_ROLES } from "../lineup/signChemistry";
 import { ScoredPlayer } from "../types";
 const N = Number(process.argv[4] ?? 14), seed = Number(process.argv[5] ?? 0);
 let all = parseCSVText(fs.readFileSync(process.argv[2], "utf-8")).filter(p => p.position !== "Academy");
@@ -14,22 +14,19 @@ all = all.map((p, i) => ({ p, k: (i * 7919 + seed * 104729) % 1009 })).sort((a, 
 const r = rankAll(all, parseParams(fs.readFileSync(process.argv[3], "utf-8")));
 const order = ["Setter","Libero","Front Outside Hitter","Back Outside Hitter","Front Middle Blocker","Back Middle Blocker","Opposite"];
 const subs = LineupBuilder.getFiveOneSubSlots();
-LineupBuilder.signSynergy = false;
-const base = new LineupBuilder(r).buildFiveOneLineup();
-const V = 0.10 * Object.values(base.lineup).reduce((s, x) => s + (x?.score ?? 0), 0) / 9;
 LineupBuilder.signSynergy = true;
 const t = Date.now(); const b = new LineupBuilder(r); const res = b.buildFiveOneLineup(); const bs = b.getSubstitutes(res.lineup, subs);
 const tB = Date.now() - t;
 const lam = 0.5, lamR = 0.25;
 function bonus(L: Record<string, ScoredPlayer|null>, sp: ScoredPlayer, j: number) {
-  const slot = subs[j].replacesSlot; let u = 0;
-  for (const court of FIVE_ONE_COURTS) { if (!court.includes(slot)) continue;
-    const mem = court.filter(s => s !== slot && L[s]).map(s => ({ key: s, role: courtRoleOf(FIVE_ONE_SLOT_ROLES[s]), sign: L[s]!.player.sign }));
+  const slot = subs[j].replacesSlot; let u = 0, lost = 0;
+  const K = courtRoleOf(subs[j].role) === "setter" ? sp.connectionScore : L["Setter"]?.connectionScore ?? 0;
+  { const mem = FIVE_ONE_COURT.filter(s => s !== slot && L[s]).map(s => ({ key: s, role: courtRoleOf(FIVE_ONE_SLOT_ROLES[s]), sign: L[s]!.player.sign }));
     mem.push({ key: "sub", role: courtRoleOf(subs[j].role), sign: sp.player.sign });
     const ev = evaluateCourt(mem);
     if (courtRoleOf(subs[j].role) === "setter") { for (const ok of ev.connected.values()) if (ok) u++; }
-    else { if (ev.active.get("sub")) u++; if (ev.connected.get("sub")) u++; } }
-  return lam * V * u / 2;
+    else { if (!ev.active.get("sub")) lost = sp.signScore; if (ev.connected.get("sub")) u++; } }
+  return lam * (K * u - lost);
 }
 function bench(L: Record<string, ScoredPlayer|null>) {
   const inS = new Set(Object.values(L).filter(Boolean).map(x => x!.player.fullName));
@@ -44,7 +41,7 @@ function bench(L: Record<string, ScoredPlayer|null>) {
   const sol = solve({ direction: "maximize", objective: "obj", constraints: cons, variables: vars, binaries: true });
   return sol.result;
 }
-const F = (L: Record<string, ScoredPlayer|null>) => Object.values(L).reduce((s, x) => s + (x?.score ?? 0), 0) + V * lineupUnits(L) + bench(L);
+const F = (L: Record<string, ScoredPlayer|null>) => Object.values(L).reduce((s, x) => s + (x?.score ?? 0), 0) + lineupChemValue(L) + bench(L);
 const fB = F(res.lineup);
 let best = -Infinity, leaves = 0; const L: Record<string, ScoredPlayer|null> = {}; const used = new Set<string>();
 const roles = order.map(s => FIVE_ONE_SLOT_ROLES[s]);

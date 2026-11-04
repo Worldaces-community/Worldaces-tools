@@ -8,8 +8,8 @@ chemistry + reception/serve rotation of the liberos), academy & progression, wea
 recruitment filter, players to sell.
 
 **No tuned profile is shipped**: every manager builds their own (web editor → export
-`params.json`). `example_params.json` is a neutral template (all stats at 5, no bonus) used
-only as an example and for tests.
+`params.json`). `example_params.json` is the editor's default profile (each stat / trait / sign
+rated 2 minor, 5 useful, 8 key per role; 0 = cannot trigger), there to show what the tool does.
 
 ## Code layout
 - `src/analyze.ts` — orchestration (`runAnalysis`), Node-free: shared by the CLI and the web app.
@@ -40,7 +40,7 @@ only as an example and for tests.
   (`npm run verify-lineup -- <roster.csv> <params.json> [nbPlayers] [seed]`).
 - `web/` — browser app: `app.ts` (params editor, CSV import, report rendering), `worker.ts`
   (analysis in a Web Worker), `lineupWorker.ts` (lineup workers spawned by `worker.ts`, one per
-  core), `schema.ts` (neutral template, params.json import/export, help
+  core), `schema.ts` (default profile, params.json import/export, help
   texts), `build.mjs` (esbuild → `web/dist/`).
 
 **Rule**: nothing under `src/` (except `cli.ts` and `src/tools/`) may depend on Node —
@@ -57,7 +57,6 @@ wrong type is ignored with a warning.
 | `lineup.subObjectiveWeight` / `reserveObjectiveWeight` | λ / λᵣ of the 5-1 MILP (0 < λᵣ < λ < 1) |
 | `lineup.signSynergy` | exact sign-chemistry optimisation |
 | `lineup.synergyTimeLimitSec` | branch & bound time limit |
-| `lineup.perfectSynergyWinPct` | win-chance gain (%) of a perfect sign chemistry (default 10) — weight of chemistry in the lineup objective and sign recruitment |
 | `availability.declineExceptionalMinGain` | minimum gain to keep a "Starting to decline" player |
 | `academy.maxAge` | maximum (inclusive) academy-eligible age |
 | `libero.subMinDelta` | minimum gain (2nd libero's lead in their best phase) to advise the libero rotation |
@@ -120,8 +119,9 @@ exclusive pairs, redundant traits) stay in the code.
   target; the quota MILP only decides among the others (role shortages are reported only if
   there are "quota" sales).
 - **Sign chemistry**: "Sign chemistry" sub-block of the 5-1 section (unnumbered, verdict
-  "units/9 · ≈ +x % win chance" in the title): sign (libero effect in brackets), chemistry per
-  phase, active effect, setter connection. Absent if the CSV has no `Sign`/`Signe` column. A
+  "+x pts · effects a/b · connections c/d" in the title): sign (libero effect in brackets),
+  chemistry, active effect and setter connection, each with the points it earns (sign bonus,
+  connection bonus). Shown with the actual activations even when `signSynergy` is off. Absent if the CSV has no `Sign`/`Signe` column. A
   substitute with a **positive** Δ = a player with a better individual score left on the bench
   for chemistry.
 - **Injury reserves** (game injury mechanic): 3rd level after the bench — one reserve per slot,
@@ -159,8 +159,9 @@ exclusive pairs, redundant traits) stay in the code.
   Sub-block of the 5-1 section (unnumbered).
 - **Recruitment — 3 signs** (`selectSigns`): for each sign, on each of the 3 targeted roles, the
   weakest starter of the role is replaced by a recruit with the same score carrying that sign;
-  contribution = sign bonus of the role (normalised 0-99) + change in starters' chemistry units
-  × value of one unit (same calibration as the 5-1). Top 3.
+  contribution = sign bonus of the role (normalised 0-99, only if the recruit's sign effect would
+  be active; the setter has none) + change in the starters' chemistry value, as in the 5-1
+  objective (connections × connection bonus − sign bonus lost to inactive effects). Top 3.
 - **Recruitment — roles**: the 3 priority roles combine the lowest normalised score of the
   weakest starter and the largest bench gap (`urgency = shortage×1e6 + (100 − score) +
   benchDelta`, a lack of players comes first). The 3 recommended traits are chosen **jointly
@@ -187,7 +188,6 @@ exclusive pairs, redundant traits) stay in the code.
   (Taurus/Leo/Scorpio/Aquarius = energy recovery on a perfect reception/dig;
   Gemini/Virgo/Sagittarius/Pisces = reflexes; Aries/Cancer/Libra/Capricorn = takes every
   contested ball).
-- **Perfect chemistry = +10 % win chance** by default (`settings.lineup.perfectSynergyWinPct`).
 
 | Sign | Effect (player other than setter/libero) |
 |---|---|
@@ -205,21 +205,29 @@ exclusive pairs, redundant traits) stay in the code.
 | Pisces | their traits trigger more often |
 
 ### Modelling
-- **Score** (`scorePlayer`): `signBonuses[role][sign]` is added raw (like a trait);
-  `idealScore` includes the best sign bonus of the role. Keep the weight **light**: it is the
-  value of the effect *assumed active*; activation depends on teammates and is handled by the
-  lineup builder.
-- **5-1 court in 2 phases** (½ each, `signChemistry.ts`): the libero replaces the back MB, the 2
-  MBs are never on court together → phase A = Setter, 2 OH, OP, Front MB, Libero; phase B = same
-  with Back MB. **Units** per phase (max 9): 5 activations (non-setters) + 4 setter ↔ attacker
-  connections (OH, OP, MB).
+- **Score** (`scorePlayer`): `signBonuses[role][sign]` (× `signWeight`) is added raw (like a
+  trait); `idealScore` includes the best sign bonus of the role. It is the value of the effect
+  *assumed active*; activation depends on teammates and is handled by the lineup builder. The
+  scorer also returns this share separately (`signScore`, same 0-99 scale): the lineup builder
+  removes it from the score of a starter whose sign effect is inactive (chemistry < 3).
+- **Setter**: no sign effect to activate → no `signBonuses` (ignored with a warning if present);
+  `connectionBonus` (× `signWeight`) instead, normalised like a bonus (`connectionScore`) but NOT
+  included in the score: the lineup earns it once per connected attacker.
+- **Chemistry over the 7 starters** (`signChemistry.ts`): the game always computes it with the 7
+  signs (Setter, 2 OH, OP, 2 MB, Libero), both MBs and the libero included even when one of them
+  is off the court during the rally; it is re-evaluated only on a position-for-position
+  substitution, still over 7 signs. 6 sign effects (non-setters) + 5 setter ↔ attacker
+  connections (2 OH, OP, 2 MB).
 - **Lineup builder — EXACT solving** (reliable rather than fast). Objective F = Σ starters'
-  scores + V·units(starters) + λ·(score + entry chemistry) of substitutes + λᵣ·score of reserves,
-  with V = p % × Σ starters' scores of the base MILP / 9 (perfect chemistry = +p % of the
-  starters' value, p = `settings.lineup.perfectSynergyWinPct`). Chemistry being quadratic, linearising it in the joint MILP does not finish
+  scores − Σ signScore of the starters whose effect is inactive + connectionScore × connected
+  attackers + λ·(score + entry chemistry) of substitutes (entry chemistry: their connections −
+  their signScore if inactive on entry) + λᵣ·score of reserves. Everything is in score points:
+  no separate chemistry calibration. Chemistry being quadratic, linearising it in the joint MILP does not finish
   (> 2 min without a solution); a local search was tried then **dropped** (no optimality
   guarantee, shown sub-optimal on a real roster). Retained method (`optimizeSignSynergy`):
-  1. base MILP without chemistry + local search ⇒ starting solutions;
+  1. base MILP without chemistry (score without sign bonus) + local search ⇒ starting solutions.
+     With `signSynergy` off, this MILP alone picks the lineup: sign effects assumed inactive,
+     the report then shows what the effects that happen to be active earn;
   2. **branch & bound** on the 7 starters with valid upper bounds: optimal assignment
      (Hungarian algorithm, `assignment.ts`) of remaining starters + bench (entry bonus bounded
      per slot and sign with the same best-sign-per-relation relaxation as the chemistry bound) +
@@ -366,12 +374,17 @@ Mind, setter dump for Surprise Attack on the setter, block for Defensive Special
 ```jsonc
 {
   "traitWeight": 1,            // multiplies every traitBonus (applied at load time)
+  "signWeight": 1,             // multiplies every signBonus and the setter's connectionBonus
   "settings": { ... },         // see Settings (optional, defaults otherwise)
   "roles": {                   // setter, outsideHitter, middleBlocker, oppositeHitter, libero
     "setter": {
       "statsWeights": { "setting": 10, ... },   // 18 lowercase sub-stats, any scale
       "traitBonuses": { "Master Mind": 0, ... }, // points added to the 0-99 stat score
-      "signBonuses":  { "Aries": 0, ... }        // value of the sign effect (assumed active)
+      "connectionBonus": 0                       // setter only: points per connected attacker
+    },
+    "outsideHitter": {
+      "statsWeights": { ... }, "traitBonuses": { ... },
+      "signBonuses":  { "Aries": 0, ... }        // value of the sign effect, counted when active
     }
   }
 }

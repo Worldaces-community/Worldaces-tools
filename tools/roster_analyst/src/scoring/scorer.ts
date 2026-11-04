@@ -118,8 +118,9 @@ function computeRawScores(
     }
 
     // Sign: light bonus = value of the sign effect for the role (setter: 0,
-    // they do not trigger a sign effect). Its ACTIVATION (chemistry ≥ 3) depends on
-    // teammates → handled by the 5-1 MILP, not here.
+    // they do not trigger a sign effect), assumed active here. Its ACTIVATION
+    // (chemistry ≥ 3) depends on teammates → the lineup builder removes it
+    // (`signScore`) when the effect is inactive.
     const signScore = player.sign ? (config.signBonuses?.[player.sign] ?? 0) : 0;
 
     return { statScore, traitScore, signScore };
@@ -149,7 +150,12 @@ export function scorePlayer(
     const ideal           = idealScore(config) || 1;
     const normalizedScore = (rawTotal / ideal) * 99;
 
-    return { player, score: normalizedScore };
+    return {
+        player,
+        score: normalizedScore,
+        signScore: (signScore / ideal) * 99,
+        connectionScore: ((config.connectionBonus ?? 0) / ideal) * 99,
+    };
 }
 
 /**

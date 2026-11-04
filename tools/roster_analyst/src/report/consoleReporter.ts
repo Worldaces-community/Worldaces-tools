@@ -221,19 +221,19 @@ export class ConsoleReporter implements Reporter {
     reportSignChemistry(a: ChemistryAnalysis): void {
         if (!a.hasSigns) return;
         const mark = (v: string) =>
-            v === "✓" ? paint.green(v) : v === "✗" ? paint.red(v) : v === "½" ? paint.yellow(v) : paint.dim(v);
+            v.startsWith("✓") ? paint.green(v) : v.startsWith("✗") ? paint.red(v) : paint.dim(v);
         const lines: string[] = [
             paint.bold(`  SIGN CHEMISTRY — ${fmtChemVerdict(a)}`),
             "",
-            paint.bold(`     ${"Position".padEnd(20)} ${"Sign".padEnd(22)} ${"Chem.".padStart(7)}  Effect Setter link`),
+            paint.bold(`     ${"Position".padEnd(20)} ${"Sign".padEnd(22)} ${"Chem.".padStart(7)}  ${"Effect".padEnd(8)}  Setter link`),
         ];
         a.starters.forEach((s, i) => {
             lines.push(
                 `  ${i + 1}. ${s.slot.padEnd(20)} ${fmtSign(s).padEnd(22)} ${fmtChem(s.chem).padStart(7)}  ` +
-                `${padEndAnsi(mark(fmtOn(s.active)), 5)}  ${mark(fmtOn(s.connected))}`
+                `${padEndAnsi(mark(fmtOn(s.active, s.signGain)), 8)}  ${mark(fmtOn(s.connected, s.connectionGain))}`
             );
         });
-        lines.push("", paint.dim("  Chemistry: front-MB phase / back-MB phase · ✓ active · ½ one phase · ✗ inactive"));
+        lines.push("", paint.dim("  Chemistry over the 7 starters · ✓ active (+x: points earned) · ✗ inactive"));
         console.log("\n" + createBox(lines, 80).join("\n"));
     }
 

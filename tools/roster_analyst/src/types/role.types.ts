@@ -9,16 +9,27 @@ export type RoleName = "setter" | "outsideHitter" | "middleBlocker" | "oppositeH
 export interface RoleConfig {
     statsWeights: Record<string, number>;
     traitBonuses: Record<string, number>;
-    /** (Light) bonus for the value of the sign effect for this role. */
+    /** (Light) bonus for the value of the sign effect for this role (not the setter). */
     signBonuses?: Record<string, number>;
+    /**
+     * Setter only: points earned per connected attacker (chemistry(setter) +
+     * chemistry(attacker) ≥ 3). The setter activates no sign effect.
+     */
+    connectionBonus?: number;
 }
 
 export interface Params {
     /**
      * Global multiplier of the traitBonuses (applied on load by
-     * loadParams) — sets the weight of traits vs stats. Default 1.
+     * loadParams): a trait rated r adds r × traitWeight points. Not a share
+     * of the score. Default 1.
      */
     traitWeight?: number;
+    /**
+     * Global multiplier of the signBonuses and of the setter's
+     * connectionBonus (applied on load), like traitWeight. Default 1.
+     */
+    signWeight?: number;
     roles: Record<RoleName, RoleConfig>;
     /** Analysis thresholds / weights (see config/settings.ts); completed with the defaults. */
     settings?: Partial<Settings>;

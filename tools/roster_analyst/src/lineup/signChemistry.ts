@@ -2,17 +2,17 @@
  * Sign chemistry on the 5-1 court — model shared by the lineup MILP
  * (LineupBuilder), the display and recruitment.
  *
- * Court: in a 5-1 the libero replaces the back-row MB, so the two MBs
- * are never on the court together. We model 2 PHASES of equal
- * weight (½ each):
- *   A : Setter · Front OH · Back OH · Opposite · Front MB · Libero
- *   B : Setter · Front OH · Back OH · Opposite · Back MB  · Libero
+ * Court: the game always computes chemistry over the 7 starters (both MBs
+ * and the libero included, even when one of them is not on the court during
+ * the rally). It is re-evaluated only on a position-for-position
+ * substitution, still over 7 signs.
  *
- * Synergy "units" per phase (9 at most):
- *   - activation of each non-setter's sign (chemistry ≥ 3): 5;
- *   - setter ↔ attacker connection (OH, OP, MB): chemistry(setter) +
- *     chemistry(attacker) ≥ 3: 4.
- * Perfect synergy = 9 units in both phases ⇒ +settings.lineup.perfectSynergyWinPct % win.
+ * Value (score points):
+ *   - each non-setter's sign effect (chemistry ≥ 3) earns their sign bonus
+ *     (signScore, included in their score: lost if inactive);
+ *   - each setter ↔ attacker connection (2 OH, OP, 2 MB): chemistry(setter) +
+ *     chemistry(attacker) ≥ 3 earns the setter's connection bonus
+ *     (connectionScore, not included in the score).
  */
 
 import { RoleName, Sign, ScoredPlayer } from "../types";
@@ -22,7 +22,6 @@ import {
     SIGN_ACTIVATION_THRESHOLD,
     SETTER_SYNERGY_THRESHOLD,
 } from "../config/signs";
-import { SETTINGS } from "../config/settings";
 
 export type CourtRole = "setter" | "hitter" | "libero";
 
@@ -32,10 +31,10 @@ export function courtRoleOf(role: RoleName): CourtRole {
     return "hitter";
 }
 
-/** Starter slots on the court in each phase (see header). */
-export const FIVE_ONE_COURTS: string[][] = [
-    ["Setter", "Front Outside Hitter", "Back Outside Hitter", "Opposite", "Front Middle Blocker", "Libero"],
-    ["Setter", "Front Outside Hitter", "Back Outside Hitter", "Opposite", "Back Middle Blocker", "Libero"],
+/** The 7 starter slots whose signs make up the chemistry (see header). */
+export const FIVE_ONE_COURT: string[] = [
+    "Setter", "Front Outside Hitter", "Back Outside Hitter", "Opposite",
+    "Front Middle Blocker", "Back Middle Blocker", "Libero",
 ];
 
 /** Role of each 5-1 starter slot. */
@@ -49,14 +48,6 @@ export const FIVE_ONE_SLOT_ROLES: Record<string, RoleName> = {
     "Opposite": "oppositeHitter",
 };
 
-/** Maximum units per phase (5 activations + 4 connections). */
-export const UNITS_PER_PHASE = 9;
-
-/** Win gain (fraction) of a perfect synergy (settings.lineup.perfectSynergyWinPct). */
-export function perfectSynergyWinGain(): number {
-    return SETTINGS.lineup.perfectSynergyWinPct / 100;
-}
-
 export interface CourtMember {
     key: string;
     role: CourtRole;
@@ -68,7 +59,6 @@ export interface CourtEval {
     active: Map<string, boolean>;
     /** Setter ↔ attacker connection, by attacker key. */
     connected: Map<string, boolean>;
-    units: number;
 }
 
 /** Evaluates a court composition (members without a player excluded upstream). */
@@ -79,21 +69,18 @@ export function evaluateCourt(members: CourtMember[]): CourtEval {
     }
     const active = new Map<string, boolean>();
     const connected = new Map<string, boolean>();
-    let units = 0;
     const setter = members.find((m) => m.role === "setter");
     for (const m of members) {
         if (m.role === "setter") continue;
         const on = !!m.sign && chem.get(m.key)! >= SIGN_ACTIVATION_THRESHOLD;
         active.set(m.key, on);
-        if (on) units++;
         if (m.role === "hitter") {
             const ok = !!setter?.sign && !!m.sign &&
                 chem.get(setter.key)! + chem.get(m.key)! >= SETTER_SYNERGY_THRESHOLD;
             connected.set(m.key, ok);
-            if (ok) units++;
         }
     }
-    return { chem, active, connected, units };
+    return { chem, active, connected };
 }
 
 // ─── Lineup analysis (display + recruitment) ─────────────────────────────────
@@ -102,29 +89,34 @@ export interface StarterChemistry {
     slot: string;
     sign: Sign | null;
     name: string | null;
-    /** Chemistry per phase (null = not on the court in this phase). */
-    chem: (number | null)[];
-    /** Sign effect active per phase (null = off the court or setter). */
-    active: (boolean | null)[];
-    /** Connection with the setter per phase (attackers only). */
-    connected: (boolean | null)[];
+    /** Chemistry (null = empty slot). */
+    chem: number | null;
+    /** Sign effect active (null = empty slot or setter). */
+    active: boolean | null;
+    /** Connection with the setter (null = not an attacker). */
+    connected: boolean | null;
+    /** Sign bonus earned (signScore if the effect is active, else 0). */
+    signGain: number;
+    /** Connection value earned (connectionScore of the setter if connected, else 0). */
+    connectionGain: number;
 }
 
 export interface ChemistryAnalysis {
     /** false ⇒ no sign in the CSV: section not displayed. */
     hasSigns: boolean;
     starters: StarterChemistry[];
-    /** Units reached (average of the 2 phases, 0-9). */
-    units: number;
-    ratio: number;
-    /** Estimated win gain (ratio × perfect synergy gain). */
-    winGain: number;
+    /** Active sign effects / non-setter starters with a sign. */
+    effects: { active: number; total: number };
+    /** Connected attackers / attackers with a sign (0 without a setter sign). */
+    connections: { active: number; total: number };
+    /** Score points earned by the activations (sign bonuses + connections). */
+    gain: number;
 }
 
 type Lineup = Record<string, ScoredPlayer | null>;
 
-function phaseMembers(lineup: Lineup, court: string[]): CourtMember[] {
-    return court
+function courtMembers(lineup: Lineup): CourtMember[] {
+    return FIVE_ONE_COURT
         .filter((slot) => lineup[slot])
         .map((slot) => ({
             key: slot,
@@ -133,50 +125,80 @@ function phaseMembers(lineup: Lineup, court: string[]): CourtMember[] {
         }));
 }
 
-/** Average units (2 phases) of a starters lineup. */
-export function lineupUnits(lineup: Lineup): number {
-    return FIVE_ONE_COURTS.reduce(
-        (s, court) => s + evaluateCourt(phaseMembers(lineup, court)).units / FIVE_ONE_COURTS.length,
-        0
-    );
+/** Chemistry evaluation of a starters lineup. */
+export function evaluateLineup(lineup: Lineup): CourtEval {
+    return evaluateCourt(courtMembers(lineup));
+}
+
+/**
+ * Sign bonus (signScore, included in the score) lost by a starter whose
+ * sign effect is inactive; 0 for the setter (no sign effect to activate).
+ */
+export function lostSignScore(lineup: Lineup, ev: CourtEval, slot: string): number {
+    const sp = lineup[slot];
+    return sp && ev.active.get(slot) === false ? sp.signScore : 0;
+}
+
+/** Value of one setter ↔ attacker connection (setter's connectionScore). */
+export function connectionValue(lineup: Lineup): number {
+    return lineup["Setter"]?.connectionScore ?? 0;
+}
+
+/**
+ * Chemistry value of a starters lineup, relative to the scores (which
+ * assume the sign effects active): connections × connection value − sign
+ * bonus lost to inactive effects. Σ scores + this = actual value.
+ */
+export function lineupChemValue(lineup: Lineup, ev: CourtEval = evaluateLineup(lineup)): number {
+    let connected = 0;
+    for (const ok of ev.connected.values()) if (ok) connected++;
+    const lost = FIVE_ONE_COURT.reduce((s, slot) => s + lostSignScore(lineup, ev, slot), 0);
+    return connected * connectionValue(lineup) - lost;
 }
 
 export function analyzeChemistry(lineup: Lineup, order: string[]): ChemistryAnalysis {
     const hasSigns = Object.values(lineup).some((sp) => !!sp?.player.sign);
-    const evals = FIVE_ONE_COURTS.map((court) => evaluateCourt(phaseMembers(lineup, court)));
+    const ev = evaluateLineup(lineup);
+    const conn = connectionValue(lineup);
     const starters: StarterChemistry[] = order.map((slot) => {
         const sp = lineup[slot];
-        const pick = <T>(f: (e: CourtEval) => T | undefined) =>
-            FIVE_ONE_COURTS.map((court, i) =>
-                sp && court.includes(slot) ? (f(evals[i]) ?? null) : null);
+        const active = ev.active.get(slot) ?? null;
+        const connected = ev.connected.get(slot) ?? null;
         return {
             slot,
             sign: sp?.player.sign ?? null,
             name: sp?.player.fullName ?? null,
-            chem: pick((e) => e.chem.get(slot)),
-            active: pick((e) => e.active.get(slot)),
-            connected: pick((e) => e.connected.get(slot)),
+            chem: ev.chem.get(slot) ?? null,
+            active,
+            connected,
+            signGain: active ? sp!.signScore : 0,
+            connectionGain: connected ? conn : 0,
         };
     });
-    const units = evals.reduce((s, e) => s + e.units, 0) / evals.length;
-    const ratio = units / UNITS_PER_PHASE;
-    return { hasSigns, starters, units, ratio, winGain: ratio * perfectSynergyWinGain() };
+    const signed = (slot: string) => !!lineup[slot]?.player.sign;
+    const count = (m: Map<string, boolean>) => {
+        let active = 0, total = 0;
+        for (const [slot, on] of m) if (signed(slot)) { total++; if (on) active++; }
+        return { active, total };
+    };
+    const effects = count(ev.active);
+    const connections = signed("Setter") ? count(ev.connected) : { active: 0, total: 0 };
+    const gain = starters.reduce((s, x) => s + x.signGain + x.connectionGain, 0);
+    return { hasSigns, starters, effects, connections, gain };
 }
 
 // ─── Shared formatting (console + markdown) ──────────────────────────────────
 
-/** "3 / 2" (2 phases) or "1" (MB, a single phase); "—" off the court. */
-export function fmtChem(values: (number | null)[]): string {
-    const v = values.filter((x): x is number => x !== null);
-    return v.length ? v.map((x) => (x > 0 ? `+${x}` : `${x}`)).join(" / ") : "—";
+/** "+3", "-1"; "—" for an empty slot. */
+export function fmtChem(value: number | null): string {
+    return value === null ? "—" : value > 0 ? `+${value}` : `${value}`;
 }
 
-/** ✓ (all phases) · ½ (one phase out of two) · ✗ · — (not applicable). */
-export function fmtOn(values: (boolean | null)[]): string {
-    const v = values.filter((x): x is boolean => x !== null);
-    if (!v.length) return "—";
-    const n = v.filter(Boolean).length;
-    return n === v.length ? "✓" : n === 0 ? "✗" : "½";
+/** ✓ · ✗ · — (not applicable), with the points earned when active ("✓ +4.2"). */
+export function fmtOn(value: boolean | null, gain = 0): string {
+    if (value === null) return "—";
+    if (!value) return "✗";
+    return Math.abs(gain) >= 0.05 ? `✓ ${gain > 0 ? "+" : "−"}${Math.abs(gain).toFixed(1)}` : "✓";
 }
 
 /** Sign (+ libero effect in parentheses for the libero). */
@@ -185,7 +207,8 @@ export function fmtSign(s: StarterChemistry): string {
     return s.slot === "Libero" ? `${s.sign} (${LIBERO_SIGN_EFFECT[s.sign]})` : s.sign;
 }
 
-/** Summary verdict: "5.5/9 · ≈ +6.1 % win". */
+/** Summary verdict: "+12.4 pts · effects 5/6 · connections 4/5". */
 export function fmtChemVerdict(a: ChemistryAnalysis): string {
-    return `${a.units.toFixed(1)}/${UNITS_PER_PHASE} · ≈ +${(a.winGain * 100).toFixed(1)} % win chance`;
+    return `${a.gain >= 0 ? "+" : "−"}${Math.abs(a.gain).toFixed(1)} pts · effects ${a.effects.active}/${a.effects.total}` +
+        ` · connections ${a.connections.active}/${a.connections.total}`;
 }
