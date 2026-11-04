@@ -61,6 +61,10 @@ export interface ScoredPlayer {
     player: Player;
     /** Score with the sign effect assumed active (0-99 scale). */
     score: number;
+    /** Part of `score` due to the stats (same scale). */
+    statScore: number;
+    /** Part of `score` due to the traits (same scale). score = statScore + traitScore + signScore. */
+    traitScore: number;
     /**
      * Part of `score` due to the sign bonus (same scale): it only counts when
      * the effect is active in the lineup (chemistry ≥ 3, see lineupBuilder).

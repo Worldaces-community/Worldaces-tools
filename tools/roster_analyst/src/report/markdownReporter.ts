@@ -23,6 +23,7 @@ import { AvailabilityResult } from "../analysis/availabilityAnalyzer";
 import { AcademyAnalysis, AcademyMove } from "../analysis/academyAnalyzer";
 import { SETTINGS } from "../config/settings";
 import { Reporter } from "./reporter";
+import { fmtScoreParts, fmtScoreShares } from "./formatters";
 import { ChemistryAnalysis, fmtChem, fmtChemVerdict, fmtOn, fmtSign } from "../lineup/signChemistry";
 import { ROLE_LABELS } from "../config/constants";
 
@@ -117,15 +118,17 @@ export class MarkdownReporter implements Reporter {
                 `${roleLabels[roleName]} – top 10`,
                 top ? `#1: ${top.player.fullName} (${top.score.toFixed(0)})` : undefined
             );
-            this.push("| # | Player | Rarity | Age | Score | Traits |");
-            this.push("|--:|---|---|--:|--:|---|");
+            const withSign = roleName !== "setter";
+            this.push("| # | Player | Rarity | Age | Score | Breakdown | Traits |");
+            this.push("|--:|---|---|--:|--:|---|---|");
             ranked.slice(0, 10).forEach((s, i) => {
                 const p = s.player;
                 this.push(
                     `| ${i + 1} | ${p.fullName} | ${rarity(p.rarity)} | ${p.age} | ` +
-                    `**${s.score.toFixed(1)}** | ${p.traits.join(", ") || "—"} |`
+                    `**${s.score.toFixed(1)}** | ${fmtScoreParts(s, withSign)} | ${p.traits.join(", ") || "—"} |`
                 );
             });
+            this.push("", `*Share of the score (top 10 average): ${fmtScoreShares(ranked.slice(0, 10), withSign)}.*`);
             if (this.verbose) {
                 const config = params.roles[roleName];
                 const fmtBonus = (v: number) => (v >= 0 ? `+${v}` : `${v}`);
@@ -170,14 +173,14 @@ export class MarkdownReporter implements Reporter {
         });
 
         this.openBlock("Starters (rarity & score)");
-        this.push("| # | Position | Player | Rarity | Score |");
-        this.push("|--:|---|---|---|--:|");
+        this.push("| # | Position | Player | Rarity | Score | Breakdown |");
+        this.push("|--:|---|---|---|--:|---|");
         lineupOrder.forEach((slot, i) => {
             const s = lineup[slot];
             this.push(
                 s
-                    ? `| ${i + 1} | ${slot} | **${s.player.fullName}** | ${rarity(s.player.rarity as Rarity)} | ${scoreBadge(s.score)} |`
-                    : `| ${i + 1} | ${slot} | ⚠️ *no eligible player* | — | — |`
+                    ? `| ${i + 1} | ${slot} | **${s.player.fullName}** | ${rarity(s.player.rarity as Rarity)} | ${scoreBadge(s.score)} | ${fmtScoreParts(s, slot !== "Setter")} |`
+                    : `| ${i + 1} | ${slot} | ⚠️ *no eligible player* | — | — | — |`
             );
         });
         this.closeBlock();

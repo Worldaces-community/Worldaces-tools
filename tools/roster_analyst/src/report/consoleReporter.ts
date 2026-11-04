@@ -15,7 +15,7 @@ import { AcademyAnalysis, AcademyMove } from "../analysis/academyAnalyzer";
 import { SETTINGS } from "../config/settings";
 import { Reporter } from "./reporter";
 import { ChemistryAnalysis, fmtChem, fmtChemVerdict, fmtOn, fmtSign } from "../lineup/signChemistry";
-import { formatPlayer, createBox, rarityName, padEndAnsi, paint, HR, HR2 } from "./formatters";
+import { formatPlayer, fmtScoreParts, fmtScoreShares, createBox, rarityName, padEndAnsi, paint, HR, HR2 } from "./formatters";
 import { ROLE_LABELS } from "../config/constants";
 
 /** Color of a normalized 0-99 score (scale shared by the whole report). */
@@ -92,9 +92,11 @@ export class ConsoleReporter implements Reporter {
             const ranked = allRankings[roleName];
 
             this.subSection(`${roleLabels[roleName]} – top 10`);
+            const withSign = roleName !== "setter";
             ranked.slice(0, 10).forEach((s, i) => {
-                console.log(formatPlayer(s, i + 1));
+                console.log(formatPlayer(s, i + 1, withSign));
             });
+            console.log(paint.dim(`\n  Share of the score (top 10 average): ${fmtScoreShares(ranked.slice(0, 10), withSign)}`));
 
             if (this.verbose) {
                 const fmtBonus = (v: number) => (v >= 0 ? `+${v}` : `${v}`);
@@ -160,7 +162,8 @@ export class ConsoleReporter implements Reporter {
             starterLines.push(
                 `  ${pos} ${slot.padEnd(20)} ${p.fullName.padEnd(24)} ` +
                 `${padEndAnsi(rarityName(p.rarity as Rarity), 10)} ` +
-                `Score: ${scoreColor(s.score)(s.score.toFixed(0).padStart(3))}`
+                `Score: ${scoreColor(s.score)(s.score.toFixed(0).padStart(3))}  ` +
+                paint.dim(`(${fmtScoreParts(s, slot !== "Setter")})`)
             );
         });
         console.log("\n" + createBox([paint.bold("  STARTERS"), ...starterLines], 80).join("\n"));

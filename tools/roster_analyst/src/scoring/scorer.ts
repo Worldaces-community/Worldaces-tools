@@ -153,6 +153,8 @@ export function scorePlayer(
     return {
         player,
         score: normalizedScore,
+        statScore: (statScore / ideal) * 99,
+        traitScore: (traitScore / ideal) * 99,
         signScore: (signScore / ideal) * 99,
         connectionScore: ((config.connectionBonus ?? 0) / ideal) * 99,
     };

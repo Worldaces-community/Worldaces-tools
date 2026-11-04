@@ -2,7 +2,9 @@
 
 Analyses a World Aces roster export with **your own scoring profile** and produces a report:
 
-1. **Role rankings** — every available player scored 0-99 for each role they can play.
+1. **Role rankings** — every available player scored 0-99 for each role they can play, with the
+   points due to stats, traits and sign, and the average share of each over the top 10 (handy to
+   tune Trait weight and Sign weight).
 2. **Recommended 5-1 lineup** — starters, bench and injury reserves chosen together (exact
    MILP), optional exact optimisation of the **sign chemistry**, and whether to rotate your two
    liberos between serve-receive and defense.
