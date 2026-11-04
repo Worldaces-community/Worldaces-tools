@@ -491,7 +491,7 @@ $("run").addEventListener("click", () => {
         list.replaceChildren(...seen.map((s) => el("li", { class: s === current ? "now" : "done" }, STEP_LABELS[s] ?? s)));
     };
 
-    worker = new Worker("worker.js");
+    worker = new Worker(`worker.js?v=${__BUILD_ID__}`);
     worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
         const m = ev.data;
         if (m.type === "progress") {
