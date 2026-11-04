@@ -13,7 +13,7 @@ import type { Player, Sign } from "../src/types";
 import {
     EditableParams, ROLES, ROLE_TITLES, STATS, TRAITS, SIGNS, RANGES,
     defaultParams, importParams, exportParams,
-    STAT_HELP, TRAIT_HELP, SIGN_HELP, LIBERO_SIGN_HELP, SETTER_SIGN_HELP, CONNECTION_HELP,
+    STAT_HELP, TRAIT_HELP, SIGN_HELP, LIBERO_SIGN_GROUPS, SETTER_SIGN_HELP, CONNECTION_HELP,
 } from "./schema";
 import type { WorkerMessage, WorkerRequest } from "./worker";
 import type { RoleName } from "../src/types";
@@ -202,10 +202,17 @@ function renderRolePanel(): void {
             label: "Connection bonus", help: CONNECTION_HELP, ...RANGES.connection, compact: true,
             get: () => cfg.connectionBonus ?? 0, set: (v) => (cfg.connectionBonus = v),
         })], SETTER_SIGN_HELP)
+        : role === "libero"
+        // 4 signs share each libero effect: one slider per effect sets all 4.
+        ? group("Sign bonuses", "value of the sign effect for the libero, counted only when it is active", LIBERO_SIGN_GROUPS.map((g) => slider({
+            label: g.effect.charAt(0).toUpperCase() + g.effect.slice(1),
+            help: `${g.signs.join(", ")} — ${g.help}`,
+            ...RANGES.sign,
+            get: () => cfg.signBonuses[g.signs[0]] ?? 0,
+            set: (v) => { for (const s of g.signs) cfg.signBonuses[s] = v; },
+        })))
         : group("Sign bonuses", "value of the sign effect for this role, counted only when it is active", SIGNS.map((s) => slider({
-            label: s,
-            help: role === "libero" ? LIBERO_SIGN_HELP[s] : SIGN_HELP[s],
-            ...RANGES.sign, compact: true,
+            label: s, help: SIGN_HELP[s], ...RANGES.sign, compact: true,
             get: () => cfg.signBonuses[s] ?? 0, set: (v) => (cfg.signBonuses[s] = v),
         })));
     $("rolePanel").replaceChildren(
