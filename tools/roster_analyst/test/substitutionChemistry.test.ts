@@ -127,11 +127,15 @@ describe("substitutionStates (accumulated substitutions)", () => {
         expect(benchChemValue(states)).toBeLessThan(0);
     });
 
-    it("slots outside the order or without a substitute are never replaced", () => {
+    it("slots outside the order are never replaced; a listed slot without substitute = unchanged state", () => {
         const states = substitutionStates(START, { ...SUBS, "Setter": sp("Sub setter", "Leo") },
             ["Opposite", "Back Middle Blocker"], 0.5);
-        expect(states).toHaveLength(2); // Back MB has no substitute, the setter is not in the order
-        expect(states[1].entered?.slot).toBe("Opposite");
+        // The setter is not in the order; Back MB has no substitute: the starter stays.
+        expect(states).toHaveLength(3);
+        expect(states[1].entered?.in).toBe(ZUO_TENG.player.fullName);
+        expect(states[2].entered).toEqual({ slot: "Back Middle Blocker", in: null, out: MADRID.player.fullName });
+        expect(states[2].value).toBeCloseTo(states[1].value);
+        expect(states.map((x) => x.weight)).toEqual([1, 0.25, 0.25]);
         expect(benchChemValue(substitutionStates(START, SUBS, [], 0.5))).toBe(0);
     });
 

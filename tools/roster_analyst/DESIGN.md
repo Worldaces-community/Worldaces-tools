@@ -228,7 +228,9 @@ exclusive pairs, redundant traits) stay in the code.
   OP: outside hitters tire fastest, then the middle blockers, then the opposite; the setter and
   the libero are treated as never replaced), each for their own substitute, and the substitutes
   stay (no return modelled). State 0 = the starting 7, state k = the first k listed slots
-  replaced (slots without a starter or a substitute skipped). Each state is evaluated over its
+  replaced; a listed slot without a starter or a substitute gives an unchanged state (the
+  starter keeps playing), so the K states always count and an empty bench slot cannot dodge a
+  bad substitution. Each state is evaluated over its
   7 players with the same chemistry value C as the starters (sign bonus lost when inactive,
   connections), so a substitute who breaks the **others'** effects or links is penalised, not
   only their own. **Bench chemistry** = λ · mean over the K substitution states of
@@ -245,17 +247,19 @@ exclusive pairs, redundant traits) stay in the code.
      the report then shows what the effects that happen to be active earn;
   2. **branch & bound** on the 7 starters (exact on the starters) with valid upper bounds:
      optimal assignment (Hungarian algorithm, `assignment.ts`) of remaining starters + bench +
-     reserves on scores without dominance, and a chemistry bound (1 − λ)·Ĉ + λ·Ĉ_sub, Ĉ = best
-     sign still available per relation (exact enumeration when ≤ 2 free slots), Ĉ_sub = the
-     same with the substitutable slots also open to every still-available player (≥ every
-     substitution state); symmetry of the 2 OH / 2 MB broken, the order constraints (Front OH ≥
+     reserves on scores without dominance, and a chemistry bound (1 − λ)·Ĉ + λ·mean_k Ĉ_k,
+     Ĉ = best sign still available per relation (exact enumeration when ≤ 2 free slots), Ĉ_k =
+     the same with the k first slots of the order also open to every still-available player
+     (state k differs from the starters only there); symmetry of the 2 OH / 2 MB broken, the order constraints (Front OH ≥
      Back OH, Back MB ≥ Front MB) applied at each leaf **before** choosing the bench (the
      substitution order is per slot);
   3. at each leaf, the bench: exact score-only optimum (Hungarian assignment; if the substitute
      ≥ reserve dominance is violated, branch & bound on per-role thresholds substitutes ≥ t ≥
      reserves), then **local search** on the bench chemistry — replace a substitute by any free
-     player of the role, or swap two substitutes' assignments (which substitute for which
-     starter) — each candidate bench with its optimal reserves (Hungarian, reserves ≤ the
+     player of the role, swap two substitutes' assignments (which substitute for which
+     starter), move a multi-role substitute to another role's slot and refill theirs; maximal
+     benches only (a slot that can be filled is never emptied) — each candidate bench with its
+     optimal reserves (Hungarian, reserves ≤ the
      role's weakest substitute). The bench is thus a local optimum; `tools/verifyLineup.ts`
      compares the whole objective to an exhaustive enumeration (starters × maximal benches) on
      sub-rosters, and the vitest suite (`npm test`) checks it on small cases.
