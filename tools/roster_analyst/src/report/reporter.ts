@@ -14,7 +14,7 @@ import { Substitute } from "../lineup/lineupBuilder";
 import { LiberoRotationAnalysis } from "../analysis/liberoRotationAnalyzer";
 import { AvailabilityResult } from "../analysis/availabilityAnalyzer";
 import { AcademyAnalysis } from "../analysis/academyAnalyzer";
-import { ChemistryAnalysis } from "../lineup/signChemistry";
+import { ChemistryAnalysis, SubstitutionState } from "../lineup/signChemistry";
 
 export interface Reporter {
     verbose: boolean;
@@ -39,6 +39,9 @@ export interface Reporter {
 
     /** Starters' sign chemistry (sub-block of the 5-1; nothing if no signs). */
     reportSignChemistry(analysis: ChemistryAnalysis): void;
+
+    /** Chemistry of the successive court states as substitutions accumulate (nothing if no signs). */
+    reportSubstitutionChemistry(states: SubstitutionState[]): void;
 
     /** Academy (in / out) + players excluded for progress. */
     reportAcademyAndProgress(availability: AvailabilityResult, academy: AcademyAnalysis): void;

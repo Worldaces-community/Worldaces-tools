@@ -58,6 +58,9 @@ jobs:
       - name: Typecheck (CLI + browser bundle)
         run: npm run typecheck
 
+      - name: Unit tests
+        run: npm test
+
       - name: Run the CLI on the example roster
         run: npm run analyze -- example_roster.csv example_params.json --md /tmp/report.md && test -s /tmp/report.md
 

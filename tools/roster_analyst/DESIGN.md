@@ -57,6 +57,7 @@ wrong type is ignored with a warning.
 | `lineup.subObjectiveWeight` / `reserveObjectiveWeight` | λ / λᵣ of the 5-1 MILP (0 < λᵣ < λ < 1) |
 | `lineup.signSynergy` | exact sign-chemistry optimisation |
 | `lineup.synergyTimeLimitSec` | branch & bound time limit |
+| `lineup.substitutionOrder` | order in which starters leave for their substitute during a set (starter slots; default 2 OH, 2 MB, OP — setter and libero never replaced) |
 | `availability.declineExceptionalMinGain` | minimum gain to keep a "Starting to decline" player |
 | `academy.maxAge` | maximum (inclusive) academy-eligible age |
 | `libero.subMinDelta` | minimum gain (2nd libero's lead in their best phase) to advise the libero rotation |
@@ -124,6 +125,10 @@ exclusive pairs, redundant traits) stay in the code.
   connection bonus). Shown with the actual activations even when `signSynergy` is off. Absent if the CSV has no `Sign`/`Signe` column. A
   substitute with a **positive** Δ = a player with a better individual score left on the bench
   for chemistry.
+- **Chemistry as substitutions accumulate**: block after "Sign chemistry" (verdict = bench
+  chemistry term): one table per state (starting 7, then each substitution in the configured
+  order: who comes in for whom), with each player's sign, chemistry, sign effect, setter link,
+  the state's weight, value and Δ against the start. Absent without signs or substitutes.
 - **Injury reserves** (game injury mechanic): 3rd level after the bench — one reserve per slot,
   the player who moves up to the bench when the starter is injured (their substitute then
   entering the starting six). Empty substitute slot ⇒ empty reserve slot.
@@ -218,31 +223,46 @@ exclusive pairs, redundant traits) stay in the code.
   is off the court during the rally; it is re-evaluated only on a position-for-position
   substitution, still over 7 signs. 6 sign effects (non-setters) + 5 setter ↔ attacker
   connections (2 OH, OP, 2 MB).
-- **Lineup builder — EXACT solving** (reliable rather than fast). Objective F = Σ starters'
-  scores − Σ signScore of the starters whose effect is inactive + connectionScore × connected
-  attackers + λ·(score + entry chemistry) of substitutes (entry chemistry: their connections −
-  their signScore if inactive on entry) + λᵣ·score of reserves. Everything is in score points:
-  no separate chemistry calibration. Chemistry being quadratic, linearising it in the joint MILP does not finish
-  (> 2 min without a solution); a local search was tried then **dropped** (no optimality
-  guarantee, shown sub-optimal on a real roster). Retained method (`optimizeSignSynergy`):
+- **Accumulated substitutions** (`substitutionStates`): during a set the starters leave in the
+  order of `settings.lineup.substitutionOrder` (default Front OH, Back OH, Front MB, Back MB,
+  OP: outside hitters tire fastest, then the middle blockers, then the opposite; the setter and
+  the libero are treated as never replaced), each for their own substitute, and the substitutes
+  stay (no return modelled). State 0 = the starting 7, state k = the first k listed slots
+  replaced (slots without a starter or a substitute skipped). Each state is evaluated over its
+  7 players with the same chemistry value C as the starters (sign bonus lost when inactive,
+  connections), so a substitute who breaks the **others'** effects or links is penalised, not
+  only their own. **Bench chemistry** = λ · mean over the K substitution states of
+  [C(state k) − C(state 0)]: the starting 7 keeps a fixed weight of 1, the substitutions add
+  their average gain / loss once (a mean, not a sum: K states do not count K times), weighted
+  by λ like the substitutes' scores (λ ≈ a substitute's playing time relative to a starter).
+- **Lineup builder** (reliable rather than fast). Objective F = Σ starters' scores − Σ
+  signScore of the starters whose effect is inactive + connectionScore × connected attackers
+  + λ·Σ substitutes' scores + λᵣ·Σ reserves' scores + bench chemistry. Everything is in score
+  points: no separate chemistry calibration. Chemistry being quadratic, linearising it in the
+  joint MILP does not finish (> 2 min without a solution). Method (`optimizeSignSynergy`):
   1. base MILP without chemistry (score without sign bonus) + local search ⇒ starting solutions.
      With `signSynergy` off, this MILP alone picks the lineup: sign effects assumed inactive,
      the report then shows what the effects that happen to be active earn;
-  2. **branch & bound** on the 7 starters with valid upper bounds: optimal assignment
-     (Hungarian algorithm, `assignment.ts`) of remaining starters + bench (entry bonus bounded
-     per slot and sign with the same best-sign-per-relation relaxation as the chemistry bound) +
-     reserves without dominance, and a chemistry bound (best sign still available per
-     relation; exact enumeration when ≤ 2 free slots); symmetry of the 2 OH / 2 MB broken;
-  3. at each leaf, **exact** bench + reserves: Hungarian assignment; if the substitute ≥
-     reserve dominance is violated, branch & bound on per-role thresholds (substitutes ≥ t ≥
-     reserves), each node being a Hungarian assignment with substitutes ≥ lo and reserves ≤ hi
-     (the equivalent yalps MILP could take minutes per call when scores are close, e.g. with
-     uniform stat weights).
-  Checked against an exhaustive enumeration (starters × bench MILP) on sub-rosters. Time:
-  a few seconds per lineup; results cached per pool (the decliners' base = main lineup). Time limit `settings.lineup.synergyTimeLimitSec`: beyond it,
-  best lineup found + "optimality not proven" warning. The **starter ≥ substitute dominance is
-  lifted** when there are signs (a substitute's Δ > 0 flags a player left out for chemistry).
-  The substitute/reserve follows their starter in front/back swaps.
+  2. **branch & bound** on the 7 starters (exact on the starters) with valid upper bounds:
+     optimal assignment (Hungarian algorithm, `assignment.ts`) of remaining starters + bench +
+     reserves on scores without dominance, and a chemistry bound (1 − λ)·Ĉ + λ·Ĉ_sub, Ĉ = best
+     sign still available per relation (exact enumeration when ≤ 2 free slots), Ĉ_sub = the
+     same with the substitutable slots also open to every still-available player (≥ every
+     substitution state); symmetry of the 2 OH / 2 MB broken, the order constraints (Front OH ≥
+     Back OH, Back MB ≥ Front MB) applied at each leaf **before** choosing the bench (the
+     substitution order is per slot);
+  3. at each leaf, the bench: exact score-only optimum (Hungarian assignment; if the substitute
+     ≥ reserve dominance is violated, branch & bound on per-role thresholds substitutes ≥ t ≥
+     reserves), then **local search** on the bench chemistry — replace a substitute by any free
+     player of the role, or swap two substitutes' assignments (which substitute for which
+     starter) — each candidate bench with its optimal reserves (Hungarian, reserves ≤ the
+     role's weakest substitute). The bench is thus a local optimum; `tools/verifyLineup.ts`
+     compares the whole objective to an exhaustive enumeration (starters × maximal benches) on
+     sub-rosters, and the vitest suite (`npm test`) checks it on small cases.
+  Results cached per pool (the decliners' base = main lineup). Time limit
+  `settings.lineup.synergyTimeLimitSec`: beyond it, best lineup found + "optimality not proven"
+  warning. The **starter ≥ substitute dominance is lifted** when there are signs (a substitute's
+  Δ > 0 flags a player left out for chemistry). Substitute ≥ reserve dominance kept.
   `settings.lineup.signSynergy = false` disables everything.
 
 ## Trait effects (official game mechanics)
