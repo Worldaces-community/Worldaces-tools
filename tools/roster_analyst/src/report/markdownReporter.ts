@@ -24,7 +24,10 @@ import { AcademyAnalysis, AcademyMove } from "../analysis/academyAnalyzer";
 import { SETTINGS } from "../config/settings";
 import { Reporter } from "./reporter";
 import { fmtScoreParts, fmtScoreShares } from "./formatters";
-import { ChemistryAnalysis, evaluateLineup, fmtChem, fmtChemVerdict, fmtOn, fmtSign, lostSignScore } from "../lineup/signChemistry";
+import {
+    ChemistryAnalysis, SubstitutionState, benchChemValue, evaluateLineup, fmtChem, fmtChemVerdict, fmtOn, fmtSign,
+    fmtPts, fmtStateTitle, fmtStateVerdict, lostSignScore,
+} from "../lineup/signChemistry";
 import { ROLE_LABELS } from "../config/constants";
 
 /** Compact rarity icon (no color in markdown). */
@@ -230,6 +233,22 @@ export class MarkdownReporter implements Reporter {
             );
         });
         this.push("", "*Chemistry over the 7 starters (both MBs and the libero included) · ✓ active (+x: points earned — sign bonus, setter connection) · ✗ inactive.*");
+        this.closeBlock();
+    }
+
+    reportSubstitutionChemistry(states: SubstitutionState[]): void {
+        if (states.length < 2 || !states[0].analysis.hasSigns) return;
+        this.openBlock("Chemistry as substitutions accumulate", `bench term ${fmtPts(benchChemValue(states))} pts`);
+        for (const st of states) {
+            this.push("", `**${fmtStateTitle(st)}** — ${fmtStateVerdict(st, states[0])}`, "");
+            this.push("| Position | Player | Sign | Chemistry | Effect | Setter connection |");
+            this.push("|---|---|---|--:|:-:|:-:|");
+            for (const s of st.analysis.starters) {
+                const name = st.entered?.slot === s.slot ? `**${s.name}** ↑` : s.name ?? "—";
+                this.push(`| ${s.slot} | ${name} | ${s.sign ?? "—"} | ${fmtChem(s.chem)} | ${fmtOn(s.active)} | ${fmtOn(s.connected)} |`);
+            }
+        }
+        this.push("", "*↑ = substitute who just came in · bench term = λ × mean Δ of the states after the start (order: `settings.lineup.substitutionOrder`).*");
         this.closeBlock();
     }
 

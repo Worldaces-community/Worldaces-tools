@@ -7,6 +7,14 @@
  * the rally). It is re-evaluated only on a position-for-position
  * substitution, still over 7 signs.
  *
+ * Substitutions accumulate during a set: starters leave in the order of
+ * `settings.lineup.substitutionOrder` (each for their own substitute), so
+ * the court goes through states 0 (starting 7), 1, 2, … (see
+ * substitutionStates). Bench chemistry = λ · mean over the states k ≥ 1 of
+ * [C(state k) − C(state 0)]: the starting 7 keeps a fixed weight of 1, the
+ * substitutions add their average gain / loss once, weighted like the
+ * substitutes' scores.
+ *
  * Value (score points):
  *   - each non-setter's sign effect (chemistry ≥ 3) earns their sign bonus
  *     (signScore, included in their score: lost if inactive);
@@ -187,6 +195,63 @@ export function analyzeChemistry(lineup: Lineup, order: string[]): ChemistryAnal
     return { hasSigns, starters, effects, connections, gain };
 }
 
+// ─── Accumulated substitutions ───────────────────────────────────────────────
+
+export interface SubstitutionState {
+    /** 0 = starting 7, k = k-th slot of the substitution order reached. */
+    step: number;
+    /**
+     * Substitution that led to this state (null for the starting 7; `in`
+     * null = no substitute for that slot: the starter stays, state unchanged).
+     */
+    entered: { slot: string; in: string | null; out: string | null } | null;
+    /** The 7 players of the chemistry in this state. */
+    lineup: Lineup;
+    analysis: ChemistryAnalysis;
+    /** Chemistry value (lineupChemValue) of this state. */
+    value: number;
+    /** Weight of the state in the lineup objective (1 for the starting 7, λ / K otherwise). */
+    weight: number;
+}
+
+/**
+ * Successive court states of a set: state 0 = starters, then one state per
+ * slot of `order` (K states): the slot's substitute replaces the starter and
+ * stays (no return); without a starter or a substitute for that slot, the
+ * court is unchanged (the starter keeps playing) — the K states always
+ * count, so leaving a bench slot empty cannot dodge a bad substitution.
+ * `subs`: substitute by starter slot.
+ */
+export function substitutionStates(
+    lineup: Lineup,
+    subs: Record<string, ScoredPlayer | null>,
+    order: string[],
+    lambda: number,
+    displayOrder: string[] = FIVE_ONE_COURT
+): SubstitutionState[] {
+    const steps = order.filter((slot) => FIVE_ONE_COURT.includes(slot));
+    const states: SubstitutionState[] = [];
+    let cur: Lineup = { ...lineup };
+    const push = (entered: SubstitutionState["entered"]) => states.push({
+        step: states.length, entered, lineup: cur,
+        analysis: analyzeChemistry(cur, displayOrder), value: lineupChemValue(cur),
+        weight: states.length === 0 ? 1 : lambda / steps.length,
+    });
+    push(null);
+    for (const slot of steps) {
+        const out = cur[slot]?.player.fullName ?? null;
+        const sub = cur[slot] ? subs[slot] ?? null : null;
+        if (sub) cur = { ...cur, [slot]: sub };
+        push({ slot, in: sub?.player.fullName ?? null, out });
+    }
+    return states;
+}
+
+/** Bench chemistry term: λ · mean_k≥1 [C(state k) − C(state 0)] (0 without substitution). */
+export function benchChemValue(states: SubstitutionState[]): number {
+    return states.slice(1).reduce((s, st) => s + st.weight * (st.value - states[0].value), 0);
+}
+
 // ─── Shared formatting (console + markdown) ──────────────────────────────────
 
 /** "+3", "-1"; "—" for an empty slot. */
@@ -211,4 +276,26 @@ export function fmtSign(s: StarterChemistry): string {
 export function fmtChemVerdict(a: ChemistryAnalysis): string {
     return `${a.gain >= 0 ? "+" : "−"}${Math.abs(a.gain).toFixed(1)} pts · effects ${a.effects.active}/${a.effects.total}` +
         ` · connections ${a.connections.active}/${a.connections.total}`;
+}
+
+/** "+3.2" / "−1.0" (points). */
+export function fmtPts(v: number): string {
+    return `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
+}
+
+/** State title: "Starting 7" / "2. Jiu Zi Cun Song in for Zhi Mei Pian Gang (Back Outside Hitter)". */
+export function fmtStateTitle(st: SubstitutionState): string {
+    if (!st.entered) return "Starting 7";
+    const e = st.entered;
+    return e.in
+        ? `${st.step}. ${e.in} in for ${e.out} (${e.slot})`
+        : `${st.step}. No substitute for ${e.slot}${e.out ? ` (${e.out} stays)` : ""}`;
+}
+
+/** State summary: "weight 0.13 · value −11.4 (Δ −18.7) · effects 0/6 · connections 1/5". */
+export function fmtStateVerdict(st: SubstitutionState, start: SubstitutionState): string {
+    const a = st.analysis;
+    const delta = st.step ? ` (Δ ${fmtPts(st.value - start.value)})` : "";
+    return `weight ${st.weight.toFixed(2)} · value ${fmtPts(st.value)}${delta} · ` +
+        `effects ${a.effects.active}/${a.effects.total} · connections ${a.connections.active}/${a.connections.total}`;
 }

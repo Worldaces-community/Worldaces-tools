@@ -14,7 +14,10 @@ import { AvailabilityResult } from "../analysis/availabilityAnalyzer";
 import { AcademyAnalysis, AcademyMove } from "../analysis/academyAnalyzer";
 import { SETTINGS } from "../config/settings";
 import { Reporter } from "./reporter";
-import { ChemistryAnalysis, evaluateLineup, fmtChem, fmtChemVerdict, fmtOn, fmtSign, lostSignScore } from "../lineup/signChemistry";
+import {
+    ChemistryAnalysis, SubstitutionState, benchChemValue, evaluateLineup, fmtChem, fmtChemVerdict, fmtOn, fmtSign,
+    fmtPts, fmtStateTitle, fmtStateVerdict, lostSignScore,
+} from "../lineup/signChemistry";
 import { formatPlayer, fmtScoreParts, fmtScoreShares, createBox, rarityName, padEndAnsi, paint, HR, HR2 } from "./formatters";
 import { ROLE_LABELS } from "../config/constants";
 
@@ -242,6 +245,30 @@ export class ConsoleReporter implements Reporter {
             );
         });
         lines.push("", paint.dim("  Chemistry over the 7 starters · ✓ active (+x: points earned) · ✗ inactive"));
+        console.log("\n" + createBox(lines, 80).join("\n"));
+    }
+
+    reportSubstitutionChemistry(states: SubstitutionState[]): void {
+        if (states.length < 2 || !states[0].analysis.hasSigns) return;
+        const mark = (v: string) =>
+            v.startsWith("✓") ? paint.green(v) : v.startsWith("✗") ? paint.red(v) : paint.dim(v);
+        const bench = benchChemValue(states);
+        const lines: string[] = [
+            paint.bold(`  CHEMISTRY AS SUBSTITUTIONS ACCUMULATE — bench term ${fmtPts(bench)} pts`),
+        ];
+        for (const st of states) {
+            lines.push("", paint.bold(`  ${fmtStateTitle(st)}`), paint.dim(`     ${fmtStateVerdict(st, states[0])}`));
+            st.analysis.starters.forEach((s) => {
+                const fresh = st.entered?.slot === s.slot ? paint.yellow("↑") : " ";
+                lines.push(
+                    `   ${fresh} ${s.slot.padEnd(20)} ${(s.name ?? "—").padEnd(24)} ${(s.sign ?? "—").padEnd(11)} ` +
+                    `${fmtChem(s.chem).padStart(3)}  ${padEndAnsi(mark(fmtOn(s.active)), 3)} ${mark(fmtOn(s.connected))}`
+                );
+            });
+        }
+        lines.push("",
+            paint.dim("  Columns: chemistry · sign effect · setter link · ↑ = substitute who just came in"),
+            paint.dim("  Bench term = λ × mean Δ of the substitution states (settings.lineup.substitutionOrder)"));
         console.log("\n" + createBox(lines, 80).join("\n"));
     }
 

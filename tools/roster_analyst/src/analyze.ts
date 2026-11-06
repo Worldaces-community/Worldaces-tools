@@ -24,7 +24,7 @@ import { analyzeLiberoRotation } from "./analysis/liberoRotationAnalyzer";
 import { analyzeAvailability, availabilityLineupPools, rankAll } from "./analysis/availabilityAnalyzer";
 import { analyzeAcademy, academyLineupPlayers } from "./analysis/academyAnalyzer";
 import { Reporter } from "./report";
-import { analyzeChemistry } from "./lineup/signChemistry";
+import { analyzeChemistry, substitutionStates } from "./lineup/signChemistry";
 
 export { parseCSVText } from "./models";
 export { normalizeParams, parseParams } from "./config";
@@ -95,6 +95,15 @@ export function runAnalysis(
     report((r) => r.reportSignChemistry(
         analyzeChemistry(fiveOneResult.lineup, LineupBuilder.getFiveOneOrder())
     ));
+
+    const subSlots = LineupBuilder.getFiveOneSubSlots();
+    report((r) => r.reportSubstitutionChemistry(substitutionStates(
+        fiveOneResult.lineup,
+        Object.fromEntries(subSlots.map((d, j) => [d.replacesSlot, fiveOneSubs[j]?.sub ?? null])),
+        LineupBuilder.substitutionOrder,
+        LineupBuilder.subObjectiveWeight,
+        LineupBuilder.getFiveOneOrder()
+    )));
 
     const liberoSub = fiveOneSubs.find((s) => s.label === "Sub Libero");
     const liberoRotation = analyzeLiberoRotation(

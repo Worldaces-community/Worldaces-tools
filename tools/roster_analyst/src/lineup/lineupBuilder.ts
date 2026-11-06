@@ -33,18 +33,21 @@
  *   score(Back MB)  >= score(Front MB)
  *     → the best MB blocks from the back (setter's line)
  *
- * Sign synergy (see signChemistry.ts) — EXACT resolution:
+ * Sign synergy (see signChemistry.ts):
  *   F = Σ starters' scores − sign bonus of the starters whose sign effect is
  *       inactive + setter's connection bonus × connected attackers
- *       + λ·(score + entry chemistry) of the substitutes + λᵣ·score of the reserves.
+ *       + λ·score of the substitutes + λᵣ·score of the reserves
+ *       + λ · mean_k [C(state k) − C(starting 7)] (substitutions accumulate
+ *       in the order of settings.lineup.substitutionOrder).
  * Chemistry is quadratic (pairs of players): linearized in the MILP,
  * yalps does not terminate. We therefore maximize F by branch & bound over the 7
  * starters (valid bounds: optimal assignment via the Hungarian algorithm +
- * chemistry bound from the still-possible signs), the bench and reserve
- * being solved exactly with fixed starters (assignment, then MILP if the
- * substitute ≥ reserve domination is not met). The starter ≥ substitute
- * domination is lifted: a player left out for chemistry can
- * go to the bench (Δ > 0). Checked against an exhaustive enumeration.
+ * chemistry bound from the still-possible signs), the bench being chosen
+ * at each leaf by local search from the exact score-only bench (choice of
+ * the substitutes and of which substitute replaces which starter). The
+ * starter ≥ substitute domination is lifted: a player left out for
+ * chemistry can go to the bench (Δ > 0). Checked against an exhaustive
+ * enumeration (tools/verifyLineup.ts).
  *
  * These constraints are applied in post-processing by a simple swap:
  * the MILP selects the two best available players,
@@ -55,8 +58,7 @@
 
 import { solve } from "yalps";
 import { ScoredPlayer, RoleName } from "../types";
-import { AFFINITY, NO_SIGN, signIndex, signAffinity, SIGN_ACTIVATION_THRESHOLD, SETTER_SYNERGY_THRESHOLD } from "../config/signs";
-import { Sign } from "../types";
+import { AFFINITY, NO_SIGN, signIndex, SIGN_ACTIVATION_THRESHOLD, SETTER_SYNERGY_THRESHOLD } from "../config/signs";
 import {
     courtRoleOf, evaluateCourt, CourtMember, FIVE_ONE_COURT, lineupChemValue,
 } from "./signChemistry";
@@ -163,6 +165,9 @@ export class LineupBuilder {
      * lineup found is kept with a warning (optimality not proven).
      */
     static get synergyTimeLimitMs(): number { return SETTINGS.lineup.synergyTimeLimitSec * 1000; }
+
+    /** Order in which the starters are replaced during a set (see signChemistry.ts). */
+    static get substitutionOrder(): string[] { return SETTINGS.lineup.substitutionOrder; }
 
     /** Already optimized results, keyed by pool contents (see buildOptimalLineup). */
     private static cache = new Map<string, { best: ModelSolution; synergyValue: number }>();
@@ -275,7 +280,7 @@ export class LineupBuilder {
             );
         }
         const key = JSON.stringify([
-            starterDefs, subSlotDefs, LineupBuilder.signSynergy,
+            starterDefs, subSlotDefs, LineupBuilder.signSynergy, LineupBuilder.substitutionOrder,
             LineupBuilder.subObjectiveWeight, LineupBuilder.reserveObjectiveWeight,
             Object.entries(pools).map(([r, pool]) =>
                 [r, pool.map((sp) => [sp.player.fullName, sp.score, sp.signScore, sp.player.sign])]),
@@ -503,7 +508,7 @@ export class LineupBuilder {
             // 2) Sign synergy: exact branch & bound over the starters,
             //    optimal bench/reserve with fixed starters.
             if (LineupBuilder.signSynergy) {
-                ({ best, synergyValue } = this.optimizeSignSynergy(starterDefs, subSlotDefs, pools, best));
+                ({ best, synergyValue } = this.optimizeSignSynergy(starterDefs, subSlotDefs, pools, best, orderConstraints));
             }
             cached = { best, synergyValue };
             LineupBuilder.cache.set(cacheKey, cached);
@@ -536,7 +541,7 @@ export class LineupBuilder {
                 starters[hiIdx] = loPlayer;
                 starters[loIdx] = hiPlayer;
                 // The substitute / reserve follows the starter they cover
-                // (their entry synergy was evaluated against the other starters).
+                // (without signs: with signs, the order is already applied before choosing the bench).
                 const hiJ = subSlotDefs.findIndex(d => d.replacesSlot === higher);
                 const loJ = subSlotDefs.findIndex(d => d.replacesSlot === lower);
                 if (hiJ !== -1 && loJ !== -1) {
@@ -569,45 +574,66 @@ export class LineupBuilder {
         return { lineup, usedPlayers: new Set(used), synergyValue: lineupChemValue(lineup) };
     }
 
-    // ─── Sign synergy: EXACT branch & bound ───────────────────────────────────
+    // ─── Sign synergy: branch & bound ─────────────────────────────────────────
     //
-    // Objective (the one a single starters + bench + reserve MILP would have):
-    //   F(S) = Σ starters' scores + C(S) + B(S)
-    //   C(S) = K·(connected attackers) − Σ sign bonus (signScore) of the
-    //          non-setter starters whose sign effect is inactive (the score
-    //          assumes it active); K = setter's connectionScore
-    //   B(S) : EXACT bench + reserve optimum with starters S fixed (λ·score +
-    //          substitute's entry chemistry: connections, minus their sign
-    //          bonus if inactive on entry; λᵣ·reserve score, player
-    //          uniqueness, substitute ≥ reserve domination).
-    // Chemistry depends on pairs of players (quadratic): linearized in the
-    // joint MILP, yalps does not terminate. We therefore IMPLICITLY enumerate all
-    // starter sets by branch & bound with valid upper bounds
-    // (optimal assignment without domination for remaining starters + bench +
-    // reserve, chemistry bound from the still-possible signs): the lineup
-    // kept is the global optimum of F (unless
-    // `synergyTimeLimitMs` is exceeded, reported by a warning).
+    // Objective:
+    //   F(S, B) = Σ starters' scores + C(S) + λ·Σ substitutes' scores
+    //             + λᵣ·Σ reserves' scores + λ · mean_k [C(S_k) − C(S)]
+    //   C(·)  = K·(connected attackers) − Σ sign bonus (signScore) of the
+    //           non-setter players whose sign effect is inactive (the score
+    //           assumes it active); K = setter's connectionScore
+    //   S_k   = court after the k first slots of
+    //           `settings.lineup.substitutionOrder` (each starter replaced by
+    //           their own substitute, substitutions accumulate, no return;
+    //           a slot without substitute leaves the court unchanged).
+    // The starting 7 keeps a fixed weight of 1; the accumulated substitutions
+    // add their AVERAGE chemistry gain / loss once, weighted by λ like the
+    // substitutes' scores (all 7 players count, so a substitute that breaks
+    // the others' effects or links is penalised).
+    //
+    // Starters: branch & bound, valid upper bounds = optimal assignment
+    // without domination (remaining starters + bench + reserves, scores only)
+    // + chemistry bound (1 − λ)·Ĉ + λ·mean_k Ĉ_k, where Ĉ is the bound of
+    // C(S) (best sign still available per relation) and Ĉ_k the same bound
+    // with the k first slots of the order also open to every still-available
+    // player (≥ C(S_k)). Bench at each leaf: exact score-only optimum
+    // (assignment, then threshold branch & bound if the substitute ≥
+    // reserve domination is violated), then local search over the
+    // substitutes (see improveBench) with optimal reserves for each
+    // candidate bench. The bench part is
+    // thus a local optimum (checked against an exhaustive enumeration on
+    // small rosters, see tools/verifyLineup.ts).
 
     private optimizeSignSynergy(
-        starterDefs: SlotDef[],
-        subSlotDefs: SubSlot[],
-        pools:       Record<string, ScoredPlayer[]>,
-        base:        ModelSolution
+        starterDefs:      SlotDef[],
+        subSlotDefs:      SubSlot[],
+        pools:            Record<string, ScoredPlayer[]>,
+        base:             ModelSolution,
+        orderConstraints: OrderConstraint[]
     ): { best: ModelSolution; synergyValue: number } {
         const anySign = Object.values(pools).some((pool) => pool.some((sp) => sp.player.sign));
         if (!anySign || base.objective === -Infinity) return { best: base, synergyValue: 0 };
 
         const t0 = Date.now();
         const nS = starterDefs.length;
-        const nB = subSlotDefs.length;
         const lambda  = LineupBuilder.subObjectiveWeight;
         const lambdaR = LineupBuilder.reserveObjectiveWeight;
         const slotIdx = new Map(starterDefs.map((d, i) => [d.slot, i]));
         const court = FIVE_ONE_COURT
             .map((slot) => slotIdx.get(slot)).filter((i): i is number => i !== undefined);
         const crole = starterDefs.map((d) => courtRoleOf(d.role));
-        const subCrole = subSlotDefs.map((d) => courtRoleOf(d.role));
         const subOf = subSlotDefs.map((d) => slotIdx.get(d.replacesSlot) ?? -1);
+
+        // Substitution order (starter slot indices that have a substitute slot).
+        const subSlotOf = new Map<number, number>();
+        subOf.forEach((i, j) => { if (i >= 0) subSlotOf.set(i, j); });
+        // Every listed court slot is a state (unchanged without a substitute).
+        const subOrder = LineupBuilder.substitutionOrder
+            .map((slot) => slotIdx.get(slot))
+            .filter((i): i is number => i !== undefined && court.includes(i));
+        /** prefixOpen[k][i]: slot i is among the k + 1 first slots of the order. */
+        const prefixOpen = subOrder.map((_, k) =>
+            starterDefs.map((_, i) => subOrder.slice(0, k + 1).includes(i) && subSlotOf.has(i)));
 
         // Value of one setter ↔ attacker connection (same for every setter).
         const connPts = (pools["setter"] ?? [])[0]?.connectionScore ?? 0;
@@ -615,46 +641,35 @@ export class LineupBuilder {
         // Players (the same player may appear in several role pools).
         const names: string[] = [];
         const nameIdx = new Map<string, number>();
-        const signOfP: (Sign | null)[] = [];
         for (const pool of Object.values(pools)) {
             for (const sp of pool) {
                 if (nameIdx.has(sp.player.fullName)) continue;
                 nameIdx.set(sp.player.fullName, names.length);
                 names.push(sp.player.fullName);
-                signOfP.push(sp.player.sign);
             }
         }
         const nP = names.length;
+        const idxOf = (sp: ScoredPlayer) => nameIdx.get(sp.player.fullName)!;
         const roleScore = new Map<RoleName, Map<number, ScoredPlayer>>();
         for (const [role, pool] of Object.entries(pools) as [RoleName, ScoredPlayer[]][]) {
-            roleScore.set(role, new Map(pool.map((sp) => [nameIdx.get(sp.player.fullName)!, sp])));
+            roleScore.set(role, new Map(pool.map((sp) => [idxOf(sp), sp])));
         }
 
-        // Sign bonus included in the score, per role and sign index (it
+        // Sign bonus included in the score, per starter slot and sign index (it
         // depends only on the role's config): lost if the effect is inactive.
-        // Setters have no sign effect to activate → never removed.
-        const rolePts = new Map<RoleName, Float64Array>();
-        for (const [role, pool] of Object.entries(pools) as [RoleName, ScoredPlayer[]][]) {
-            const t = new Float64Array(13);
-            for (const sp of pool) t[signIndex(sp.player.sign)] = sp.signScore;
-            rolePts.set(role, t);
-        }
-        const ptsTable = (defs: { role: RoleName }[]) => {
-            const t = new Float64Array(defs.length * 13);
-            defs.forEach((d, i) => {
-                if (courtRoleOf(d.role) !== "setter") t.set(rolePts.get(d.role) ?? new Float64Array(13), i * 13);
-            });
-            return t;
-        };
-        const starterPts = ptsTable(starterDefs);
-        const subPts = ptsTable(subSlotDefs);
+        // Setters have no sign effect to activate → never removed. A
+        // substitute has the role of the slot they replace ⇒ same table.
+        const starterPts = new Float64Array(nS * 13);
+        starterDefs.forEach((d, i) => {
+            if (courtRoleOf(d.role) === "setter") return;
+            for (const sp of pools[d.role] ?? []) starterPts[i * 13 + signIndex(sp.player.sign)] = sp.signScore;
+        });
 
         type Lineup = (ScoredPlayer | null)[];
-        const sg = (S: Lineup, i: number) => S[i]?.player.sign ?? null;
 
-        /** Chemistry value C of starters S (score points). */
+        /** Chemistry value C of a court (score points). */
         // Numeric version (branch & bound hot path): sig[i] = sign index
-        // of starter i (NO_SIGN = no sign, −1 = empty slot).
+        // of the player in slot i (NO_SIGN = no sign, −1 = empty slot).
         const chemBuf = new Int32Array(nS);
         const chemOfSigs = (sig: ArrayLike<number>): number => {
             let value = 0;
@@ -679,69 +694,27 @@ export class LineupBuilder {
         /** Chemistry value C of starters S. */
         const starterChem = (S: Lineup): number => chemOfSigs(sigOf(S));
 
-        /** Entry value (connections, lost sign bonus) of a substitute of sign k entering slot j (starters S). */
-        const entryValue = (S: Lineup, j: number, k: Sign): number => {
-            const i = subOf[j];
-            if (i < 0 || !court.includes(i)) return 0;
-            let connections = 0;
-            let lost = 0;
-            const others = court.filter((t) => t !== i && S[t]);
-            let subChem = 0;
-            for (const o of others) subChem += signAffinity(k, sg(S, o));
-            const chemWithSub = (h: number) => {
-                let c = signAffinity(sg(S, h), k);
-                for (const o of others) if (o !== h) c += signAffinity(sg(S, h), sg(S, o));
-                return c;
-            };
-            if (subCrole[j] === "setter") {
-                for (const h of others) {
-                    if (crole[h] === "hitter" && sg(S, h) &&
-                        subChem + chemWithSub(h) >= SETTER_SYNERGY_THRESHOLD) connections++;
-                }
-            } else {
-                if (subChem < SIGN_ACTIVATION_THRESHOLD) lost = subPts[j * 13 + signIndex(k)];
-                const setter = others.find((t) => crole[t] === "setter");
-                if (subCrole[j] === "hitter" && setter !== undefined && sg(S, setter) &&
-                    chemWithSub(setter) + subChem >= SETTER_SYNERGY_THRESHOLD) connections++;
+        /** Bench chemistry term λ · mean_k [C(S_k) − C(S)] (substitutes B by sub slot). */
+        const benchChem = (S: Lineup, B: Lineup): number => {
+            const sig = sigOf(S);
+            const c0 = chemOfSigs(sig);
+            let sum = 0;
+            for (const i of subOrder) {
+                const j = subSlotOf.get(i);
+                const sub = j === undefined ? null : B[j];
+                if (S[i] && sub) sig[i] = signIndex(sub.player.sign);
+                sum += chemOfSigs(sig);
             }
-            return connPts * connections - lost;
+            return subOrder.length ? lambda * (sum / subOrder.length - c0) : 0;
         };
-        const bonusTable = (S: Lineup) => {
-            const cache = new Map<string, number>();
-            return (sign: Sign | null, j: number): number => {
-                if (!sign) return 0;
-                const key = `${j}|${sign}`;
-                let v = cache.get(key);
-                if (v === undefined) {
-                    v = lambda * entryValue(S, j, sign);
-                    cache.set(key, v);
-                }
-                return v;
-            };
-        };
-        /** Maximum entry bonus of a substitute slot (bound). */
-        const maxBonus = subSlotDefs.map((d, j) => {
-            const i = subOf[j];
-            if (i < 0 || !court.includes(i)) return 0;
-            const hitters = court.filter((t) => crole[t] === "hitter").length;
-            const connections = { setter: hitters, hitter: 1, libero: 0 }[subCrole[j]];
-            // An inactive negative sign bonus is a gain.
-            let gain = 0;
-            for (let k = 0; k < NO_SIGN; k++) gain = Math.max(gain, -subPts[j * 13 + k]);
-            return lambda * (connPts * connections + gain);
-        });
 
         /**
-         * Optimal assignment WITHOUT domination (Hungarian algorithm):
-         * remaining starter slots (score) + substitutes (λ·score + bonus) +
-         * reserves (λᵣ·score), players outside `used`. Upper bound; equal
-         * to B(S) when the solution respects domination.
+         * Optimal assignment WITHOUT domination (Hungarian algorithm), scores
+         * only: remaining starter slots (score) + substitutes (λ·score) +
+         * reserves (λᵣ·score), players outside `used`. Upper bound of the
+         * score part; also the bench optimum when it respects domination.
          */
-        const assign = (
-            used: Set<number>,
-            starterSlots: number[],
-            subBonus: (sign: Sign | null, j: number) => number
-        ) => {
+        const assign = (used: Set<number>, starterSlots: number[]) => {
             const cols: number[] = [];
             for (let p = 0; p < nP; p++) if (!used.has(p)) cols.push(p);
             const rows: { kind: "s" | "b" | "r"; idx: number; role: RoleName }[] = [
@@ -752,9 +725,7 @@ export class LineupBuilder {
             const value = rows.map((row) => cols.map((p) => {
                 const sp = roleScore.get(row.role)?.get(p);
                 if (!sp) return null;
-                if (row.kind === "s") return sp.score;
-                if (row.kind === "b") return lambda * sp.score + subBonus(signOfP[p], row.idx);
-                return lambdaR * sp.score;
+                return (row.kind === "s" ? 1 : row.kind === "b" ? lambda : lambdaR) * sp.score;
             }));
             const { total, colOf } = maxAssignment(value, cols.length);
             const at = (kind: "b" | "r", j: number): ScoredPlayer | null => {
@@ -765,34 +736,252 @@ export class LineupBuilder {
             return { total, at };
         };
 
-        // ── Exact evaluation of a complete starter set ───────────────────────
+        /**
+         * Optimal reserves for fixed starters + substitutes: per role, every
+         * reserve ≤ every substitute (empty substitute slot = 0 ⇒ no reserve).
+         */
+        const reservesFor = (inUse: Set<number>, B: Lineup) => {
+            const thr = new Map<RoleName, number>();
+            subSlotDefs.forEach((d, j) =>
+                thr.set(d.role, Math.min(thr.get(d.role) ?? Infinity, B[j]?.score ?? 0)));
+            const cols: number[] = [];
+            for (let p = 0; p < nP; p++) if (!inUse.has(p)) cols.push(p);
+            const value = subSlotDefs.map((d) => cols.map((p) => {
+                const sp = roleScore.get(d.role)?.get(p);
+                return sp && sp.score <= thr.get(d.role)! ? lambdaR * sp.score : null;
+            }));
+            const { total, colOf } = maxAssignment(value, cols.length);
+            const reserves = subSlotDefs.map((d, j) =>
+                colOf[j] >= 0 ? roleScore.get(d.role)!.get(cols[colOf[j]])! : null);
+            return { total, reserves };
+        };
+
+        const slotsPerRole = new Map<RoleName, number>();
+        for (const d of subSlotDefs) slotsPerRole.set(d.role, (slotsPerRole.get(d.role) ?? 0) + 1);
+        /**
+         * Bench part of F for starters S: λ·Σ substitutes + reserves + bench
+         * chemistry. `floor`: if even an upper bound of the reserves cannot
+         * beat it, the exact reserves are skipped (value = that bound,
+         * reserves = null).
+         */
+        const benchValue = (S: Lineup, usedS: Set<number>, B: Lineup, floor = -Infinity) => {
+            const inUse = new Set(usedS);
+            let subs = 0;
+            const thr = new Map<RoleName, number>();
+            B.forEach((sp, j) => {
+                const role = subSlotDefs[j].role;
+                thr.set(role, Math.min(thr.get(role) ?? Infinity, sp?.score ?? 0));
+                if (sp) { inUse.add(idxOf(sp)); subs += lambda * sp.score; }
+            });
+            const partial = subs + benchChem(S, B);
+            if (floor > -Infinity) {
+                // Reserves bound: per role, its n best free players not above the
+                // weakest substitute (uniqueness across roles relaxed).
+                let ub = partial;
+                for (const [role, n] of slotsPerRole) {
+                    const t = thr.get(role)!;
+                    let left = n;
+                    for (const sp of pools[role] ?? []) {   // sorted by score desc
+                        if (left === 0) break;
+                        if (sp.score > t || inUse.has(idxOf(sp))) continue;
+                        ub += lambdaR * sp.score; left--;
+                    }
+                }
+                if (ub <= floor) return { value: ub, reserves: null };
+            }
+            const r = reservesFor(inUse, B);
+            return { value: partial + r.total, reserves: r.reserves };
+        };
+
+        /**
+         * Local search over the substitutes (best improvement). Moves:
+         * replace one substitute by a free player of the role; swap two
+         * substitutes' assignments (which substitute for which starter);
+         * move a substitute to a slot of another role (multi-role player) and
+         * refill theirs with a free player. Only MAXIMAL benches are kept (an empty slot has no free
+         * eligible player): a slot that can be filled is never emptied.
+         */
+        const improveBench = (S: Lineup, usedS: Set<number>, B0: Lineup) => {
+            const nB = subSlotDefs.length;
+            const eligible = (j: number, sp: ScoredPlayer) => roleScore.get(subSlotDefs[j].role)?.get(idxOf(sp));
+            const freeFor = (j: number, inB: Set<number>) =>
+                (pools[subSlotDefs[j].role] ?? []).filter((sp) => !usedS.has(idxOf(sp)) && !inB.has(idxOf(sp)));
+            const maximal = (C: Lineup) => {
+                if (C.every(Boolean)) return true;
+                const inC = new Set(C.filter(Boolean).map((sp) => idxOf(sp!)));
+                return C.every((sp, j) => sp || freeFor(j, inC).length === 0);
+            };
+            let B = [...B0];
+            let cur = benchValue(S, usedS, B);
+            for (;;) {
+                let bestB: Lineup | null = null;
+                let bestV = cur.value + 1e-9;
+                let bestR = cur;
+                const inB = new Set(B.filter(Boolean).map((sp) => idxOf(sp!)));
+                const tryB = (C: Lineup) => {
+                    if (!maximal(C)) return;
+                    const v = benchValue(S, usedS, C, bestV);
+                    if (v.reserves && v.value > bestV) { bestV = v.value; bestB = C; bestR = v; }
+                };
+                for (let j = 0; j < nB; j++) {
+                    for (const sp of freeFor(j, inB)) { const C = [...B]; C[j] = sp; tryB(C); }
+                }
+                for (let j = 0; j < nB; j++) {
+                    for (let k = 0; k < nB; k++) {
+                        if (j === k || !B[k]) continue;
+                        const toJ = eligible(j, B[k]!);
+                        if (!toJ) continue;
+                        // Swap (or move into an empty slot).
+                        if (j < k || !B[j]) {
+                            const toK = B[j] ? eligible(k, B[j]!) : null;
+                            if (!B[j] || toK) { const C = [...B]; C[j] = toJ; C[k] = toK ?? null; tryB(C); }
+                        }
+                        // Move B[k] to a slot of ANOTHER role and refill slot k with a
+                        // free player (same role = a swap followed by a replacement).
+                        if (subSlotDefs[j].role === subSlotDefs[k].role) continue;
+                        const inC = new Set(inB);
+                        if (B[j]) inC.delete(idxOf(B[j]!));
+                        for (const sp of freeFor(k, inC)) {
+                            const C = [...B]; C[j] = toJ; C[k] = eligible(k, sp)!; tryB(C);
+                        }
+                    }
+                }
+                if (!bestB) break;
+                B = bestB; cur = bestR;
+            }
+            return { subs: B, reserves: cur.reserves!, value: cur.value };
+        };
+
+        // ── Chemistry bound ──────────────────────────────────────────────────
+        // Each slot not fixed (or open: substitutable in this state) takes,
+        // independently for each relation, the best of the signs still
+        // available in its pool (player uniqueness relaxed ⇒ always valid).
+        const cand = starterDefs.map((d) => pools[d.role] ?? []);
+        const candIdx = cand.map((pool) => pool.map((sp) => ({ p: idxOf(sp), k: signIndex(sp.player.sign) })));
+        /** Distinct sign indices of the still-available candidates of each slot. */
+        const availSigns = (used: Set<number>): number[][] => candIdx.map((pool) => {
+            const seen: number[] = [];
+            for (const { p, k } of pool) if (!used.has(p) && !seen.includes(k)) seen.push(k);
+            return seen;
+        });
+        const maxAff = new Int8Array(nS * 13);
+        const T = new Int32Array(nS);
+        /**
+         * Chemistry bound for one state. `avail` = availSigns(used); `open`:
+         * slots that may hold their substitute (starter sign or any
+         * available sign).
+         */
+        const chemBound = (S: Lineup, fixed: boolean[], avail: number[][], open?: boolean[]): number => {
+            const isFixed = (i: number) => fixed[i] && !open?.[i];
+            const sets: number[][] = starterDefs.map((_, i) => {
+                const own = S[i] ? signIndex(S[i]!.player.sign) : -1;
+                if (isFixed(i)) return own >= 0 ? [own] : [];
+                if (fixed[i] && own >= 0 && !avail[i].includes(own)) return [own, ...avail[i]];
+                return avail[i];
+            });
+            // Few free slots: exact enumeration of sign combinations.
+            const free = starterDefs.map((_, i) => i).filter((i) => !isFixed(i) && sets[i].length > 0);
+            if (free.length <= 2) {
+                let bestU = -Infinity;
+                for (let i = 0; i < nS; i++) T[i] = S[i] ? signIndex(S[i]!.player.sign) : -1;
+                const rec = (k: number) => {
+                    if (k === free.length) { bestU = Math.max(bestU, chemOfSigs(T)); return; }
+                    for (const sign of sets[free[k]]) { T[free[k]] = sign; rec(k + 1); }
+                    // An unfixed slot may also end up empty (its candidates taken elsewhere).
+                    T[free[k]] = -1; rec(k + 1);
+                };
+                rec(0);
+                return bestU;
+            }
+            const present = court.filter((i) => sets[i].length > 0);
+            for (const o of present) {
+                for (let k = 0; k < 13; k++) {
+                    let mx = -128;
+                    for (const l of sets[o]) { const v = AFFINITY[k * 13 + l]; if (v > mx) mx = v; }
+                    maxAff[o * 13 + k] = mx;
+                }
+            }
+            let value = 0;
+            let setter = -1;
+            for (const i of present) if (crole[i] === "setter") setter = i;
+            // Best chemistry of each slot, and bound of its activation term
+            // (0 if active, −sign bonus if inactive), per possible sign.
+            const chemUbOf = (m: number): [number, number] => {
+                let bestC = -Infinity;
+                let act = isFixed(m) ? -Infinity : 0;
+                for (const k of sets[m]) {
+                    if (k === NO_SIGN) { act = Math.max(act, 0); continue; }
+                    let c = 0;
+                    for (const o of present) if (o !== m) c += maxAff[o * 13 + k];
+                    if (c > bestC) bestC = c;
+                    const pts = starterPts[m * 13 + k];
+                    act = Math.max(act, c >= SIGN_ACTIVATION_THRESHOLD ? Math.max(0, -pts) : -pts);
+                }
+                return [bestC, act];
+            };
+            const setterUb = setter >= 0 ? chemUbOf(setter)[0] : -Infinity;
+            for (const m of present) {
+                if (crole[m] === "setter") continue;
+                const [c, act] = chemUbOf(m);
+                value += act;
+                if (crole[m] === "hitter" && setter >= 0 && setterUb + c >= SETTER_SYNERGY_THRESHOLD) value += connPts;
+            }
+            return value;
+        };
+        /**
+         * Bound of mean_k C(S_k): state k differs from the starters only on
+         * the k first slots of the order ⇒ C(S_k) ≤ bound with those open.
+         */
+        const statesBound = (S: Lineup, fixed: boolean[], avail: number[][]): number =>
+            prefixOpen.reduce((s, open) => s + chemBound(S, fixed, avail, open), 0) / prefixOpen.length;
+        /** Bound of C(S) + bench chemistry = (1 − λ)·C(S) + λ·mean_k C(S_k). */
+        const chemTermBound = (S: Lineup, fixed: boolean[], used: Set<number>): number => {
+            const avail = availSigns(used);
+            const b0 = chemBound(S, fixed, avail);
+            return subOrder.length ? (1 - lambda) * b0 + lambda * statesBound(S, fixed, avail) : b0;
+        };
+
+        // ── Evaluation of a complete starter set ─────────────────────────────
+        // Order constraints applied first (Front OH ≥ Back OH, Back MB ≥
+        // Front MB): the substitution order is per slot, so the bench is
+        // chosen for the final slot assignment.
+        const canon = (S0: Lineup): Lineup => {
+            const S = [...S0];
+            for (const { higher, lower } of orderConstraints) {
+                const hi = slotIdx.get(higher), lo = slotIdx.get(lower);
+                if (hi === undefined || lo === undefined || !S[hi] || !S[lo]) continue;
+                if (S[hi]!.score < S[lo]!.score) [S[hi], S[lo]] = [S[lo], S[hi]];
+            }
+            return S;
+        };
         let best: ModelSolution = base;
         let bestTotal = -Infinity;
         let bestS: Lineup = base.starters;
         const scoreSum = (S: Lineup) => S.reduce((s, sp) => s + (sp?.score ?? 0), 0);
-        const usedOf = (S: Lineup) => new Set(S.filter(Boolean).map((sp) => nameIdx.get(sp!.player.fullName)!));
-        const consider = (S: Lineup): void => {
-            const starterPart = scoreSum(S) + starterChem(S);
-            const bonus = bonusTable(S);
-            const a = assign(usedOf(S), [], bonus);
-            if (starterPart + a.total <= bestTotal + 1e-9) return;
-            const subs = subSlotDefs.map((_, j) => a.at("b", j));
+        const usedOf = (S: Lineup) => new Set(S.filter(Boolean).map((sp) => idxOf(sp!)));
+        const allFixed = new Array<boolean>(nS).fill(true);
+        const consider = (S0: Lineup): void => {
+            const S = canon(S0);
+            const usedS = usedOf(S);
+            const c0 = starterChem(S);
+            const starterPart = scoreSum(S) + c0;
+            const a = assign(usedS, []);
+            const chemUb = subOrder.length ? lambda * (statesBound(S, allFixed, availSigns(usedS)) - c0) : 0;
+            if (starterPart + a.total + chemUb <= bestTotal + 1e-9) return;
+            // Exact score-only bench (substitute ≥ reserve domination), then local search.
+            let subs = subSlotDefs.map((_, j) => a.at("b", j));
             const reserves = subSlotDefs.map((_, j) => a.at("r", j));
-            // Substitute ≥ reserve domination (per role, empty slot = 0).
             const dominated = subSlotDefs.every((dj, j) => subSlotDefs.every((dk, k) =>
                 dj.role !== dk.role || (subs[j]?.score ?? 0) >= (reserves[k]?.score ?? 0)));
-            let sol = { subs, reserves, objective: a.total };
-            if (!dominated) {
-                sol = this.solveBench(subSlotDefs, pools, S,
-                    (sp, j) => bonus(sp.player.sign, j));
-            }
-            const total = starterPart + sol.objective;
+            if (!dominated) subs = this.solveBench(subSlotDefs, pools, S, () => 0).subs;
+            const sol = improveBench(S, usedS, subs);
+            const total = starterPart + sol.value;
             if (total > bestTotal + 1e-9) {
                 bestTotal = total;
-                bestS = [...S];
+                bestS = S;
                 best = {
-                    starters: [...S], subs: sol.subs, reserves: sol.reserves,
-                    objective: scoreSum(S) + sol.objective,
+                    starters: S, subs: sol.subs, reserves: sol.reserves,
+                    objective: scoreSum(S) + sol.value,
                 };
             }
         };
@@ -806,9 +995,7 @@ export class LineupBuilder {
 
         // ── Branch & bound over the starters ─────────────────────────────────
         // Symmetry: slots of the same role (2 OH, 2 MB) are interchangeable
-        // for F (all 7 starters count in the chemistry; substitutes
-        // reassigned by the bench optimization) → increasing indices.
-        const cand = starterDefs.map((d) => pools[d.role] ?? []);
+        // (consider() reorders them by the order constraints) → increasing indices.
         const prevSameRole = starterDefs.map((d, i) =>
             starterDefs.findIndex((e, k) => k < i && e.role === d.role));
 
@@ -816,136 +1003,8 @@ export class LineupBuilder {
         const fixed: boolean[] = new Array(nS).fill(false);
         const pick: number[] = new Array(nS).fill(-1);
         const used = new Set<number>();
-
-        // Chemistry bound: an unfixed slot takes, independently for each
-        // relation, the best of the signs still available in its pool.
-        const synergyBound = (): number => {
-            const signsOf: (Sign | null)[][] = starterDefs.map((_, i) => {
-                if (fixed[i]) return S[i] ? [S[i]!.player.sign] : [];
-                const out = new Set<Sign | null>();
-                for (const sp of cand[i]) {
-                    if (!used.has(nameIdx.get(sp.player.fullName)!)) out.add(sp.player.sign);
-                }
-                return [...out];
-            });
-            // Few free slots: exact enumeration of sign combinations
-            // (player uniqueness relaxed ⇒ bound always valid).
-            const free = starterDefs.map((_, i) => i).filter((i) => !fixed[i] && signsOf[i].length > 0);
-            if (free.length <= 2) {
-                let bestU = 0;
-                const T = sigOf(S);
-                const rec = (k: number) => {
-                    if (k === free.length) { bestU = Math.max(bestU, chemOfSigs(T)); return; }
-                    for (const sign of signsOf[free[k]]) { T[free[k]] = signIndex(sign); rec(k + 1); }
-                    // An unfixed slot may also end up empty (its candidates taken elsewhere).
-                    T[free[k]] = -1; rec(k + 1);
-                };
-                bestU = -Infinity;
-                rec(0);
-                return bestU;
-            }
-            let value = 0;
-            const present = court.filter((i) => signsOf[i].length > 0);
-            const chemUb = new Map<number, number>();
-            // Bound of each slot's activation term (0 if active, −sign bonus
-            // if inactive), per possible sign.
-            const actUb = new Map<number, number>();
-            for (const m of present) {
-                let bestC = -Infinity;
-                let act = fixed[m] ? -Infinity : 0;
-                for (const k of signsOf[m]) {
-                    if (!k) { act = Math.max(act, 0); continue; }
-                    let c = 0;
-                    for (const o of present) {
-                        if (o === m) continue;
-                        let mx = -Infinity;
-                        for (const l of signsOf[o]) mx = Math.max(mx, signAffinity(k, l));
-                        c += mx;
-                    }
-                    bestC = Math.max(bestC, c);
-                    const pts = starterPts[m * 13 + signIndex(k)];
-                    act = Math.max(act, c >= SIGN_ACTIVATION_THRESHOLD ? Math.max(0, -pts) : -pts);
-                }
-                chemUb.set(m, bestC);
-                actUb.set(m, act);
-            }
-            const setter = present.find((i) => crole[i] === "setter");
-            for (const m of present) {
-                if (crole[m] === "setter") continue;
-                value += actUb.get(m)!;
-                if (crole[m] === "hitter" && setter !== undefined &&
-                    chemUb.get(setter)! + chemUb.get(m)! >= SETTER_SYNERGY_THRESHOLD) value += connPts;
-            }
-            return value;
-        };
-        // Bound on the substitutes' entry bonus, per slot j and sign k: same
-        // relaxation as synergyBound (best possible sign per relation;
-        // an unfixed slot may end up empty ⇒ affinity 0 possible). Much
-        // tighter than maxBonus (all units reached) as soon as some
-        // starters are fixed, which prunes the B&B well before the leaves.
-        const bonusUb = new Float64Array(nB * 13);
-        const maxAff = new Int8Array(nS * 13);
-        const hasSign = new Array<boolean>(nS);
-        const present = new Array<boolean>(nS);
-        const signSets: number[][] = new Array(nS);
-        const benchBonusBound = (): ((sign: Sign | null, j: number) => number) => {
-            for (let o = 0; o < nS; o++) {
-                let set: number[];
-                if (fixed[o]) set = S[o] ? [signIndex(S[o]!.player.sign)] : [];
-                else {
-                    const seen = new Set<number>();
-                    for (const sp of cand[o]) {
-                        if (!used.has(nameIdx.get(sp.player.fullName)!)) seen.add(signIndex(sp.player.sign));
-                    }
-                    set = [...seen];
-                }
-                signSets[o] = set;
-                present[o] = set.length > 0;
-                hasSign[o] = set.some((l) => l !== NO_SIGN);
-                for (let k = 0; k < 13; k++) {
-                    let mx = fixed[o] ? -Infinity : 0;
-                    for (const l of set) mx = Math.max(mx, AFFINITY[k * 13 + l]);
-                    maxAff[o * 13 + k] = present[o] ? mx : 0;
-                }
-            }
-            bonusUb.fill(0);
-            for (let j = 0; j < nB; j++) {
-                const i = subOf[j];
-                if (i < 0 || !court.includes(i)) continue;
-                const others = court.filter((t) => t !== i && present[t]);
-                for (let k = 0; k < NO_SIGN; k++) {
-                    let value = 0;
-                    let subChem = 0;
-                    for (const o of others) subChem += maxAff[o * 13 + k];
-                    const chemWithSubUb = (h: number): number => {
-                        let best = -Infinity;
-                        for (const l of signSets[h]) {
-                            if (l === NO_SIGN) continue;
-                            let c = AFFINITY[l * 13 + k];
-                            for (const o of others) if (o !== h) c += maxAff[o * 13 + l];
-                            best = Math.max(best, c);
-                        }
-                        return best;
-                    };
-                    if (subCrole[j] === "setter") {
-                        for (const h of others) {
-                            if (crole[h] === "hitter" && hasSign[h] &&
-                                subChem + chemWithSubUb(h) >= SETTER_SYNERGY_THRESHOLD) value += connPts;
-                        }
-                    } else {
-                        const pts = subPts[j * 13 + k];
-                        value += subChem >= SIGN_ACTIVATION_THRESHOLD ? Math.max(0, -pts) : -pts;
-                        const setter = others.find((t) => crole[t] === "setter");
-                        if (subCrole[j] === "hitter" && setter !== undefined && hasSign[setter] &&
-                            chemWithSubUb(setter) + subChem >= SETTER_SYNERGY_THRESHOLD) value += connPts;
-                    }
-                    bonusUb[j * 13 + k] = Math.min(maxBonus[j], lambda * value);
-                }
-            }
-            return (sign, j) => bonusUb[j * 13 + signIndex(sign)];
-        };
         const assignBound = (fromSlot: number): number =>
-            assign(used, Array.from({ length: nS - fromSlot }, (_, k) => fromSlot + k), benchBonusBound()).total;
+            assign(used, Array.from({ length: nS - fromSlot }, (_, k) => fromSlot + k)).total;
 
         let timedOut = false;
         let nodes = 0;
@@ -961,18 +1020,18 @@ export class LineupBuilder {
             // more player can only lower it ⇒ partial + score(c) + rest
             // decreases with c (sorted by score) → stop as soon as it fails.
             const restAssign = assignBound(i + 1);
-            const rest = restAssign + synergyBound();
+            const rest = restAssign + chemTermBound(S, fixed, used);
             let any = false;
             for (let c = start; c < cand[i].length; c++) {
                 const sp = cand[i][c];
-                const p = nameIdx.get(sp.player.fullName)!;
+                const p = idxOf(sp);
                 if (used.has(p)) continue;
                 any = true;
                 if (partial + sp.score + rest <= bestTotal + 1e-9) break;
                 used.add(p); S[i] = sp; pick[i] = c; fixed[i] = true;
                 // Chemistry bound (c fixed) first with the assignment without removing
                 // c (≥ the true one, cheap), then the exact assignment.
-                const syn = synergyBound();
+                const syn = chemTermBound(S, fixed, used);
                 if (partial + sp.score + restAssign + syn > bestTotal + 1e-9 &&
                     partial + sp.score + assignBound(i + 1) + syn > bestTotal + 1e-9) {
                     dfs(i + 1, partial + sp.score);
@@ -1041,7 +1100,8 @@ export class LineupBuilder {
 
     /**
      * EXACT bench + reserve optimum with FIXED starters. Objective: λ·score +
-     * entry synergy bonus (substitutes) + λᵣ·score (reserves);
+     * per-slot bonus (substitutes; 0 here: score-only starting bench of the
+     * chemistry local search) + λᵣ·score (reserves);
      * substitute ≥ reserve domination per role (empty substitute slot ⇒ no
      * reserve). No starter ≥ substitute domination: the
      * starters are chosen by the global objective (chemistry included), a

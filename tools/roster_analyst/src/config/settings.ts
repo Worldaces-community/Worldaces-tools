@@ -29,6 +29,15 @@ export interface Settings {
         signSynergy: boolean;
         /** Safety limit of the synergy branch & bound (seconds). */
         synergyTimeLimitSec: number;
+        /**
+         * Order in which the starters leave the court for their substitute
+         * during a set (starter slots, first = leaves first). Substitutions
+         * accumulate: state k = the first k listed slots replaced by their
+         * substitute. Slots not listed (by default the setter and the
+         * libero) are never replaced. Drives the bench chemistry term
+         * λ · mean_k [C(state k) − C(starting 7)].
+         */
+        substitutionOrder: string[];
     };
 
     availability: {
@@ -88,6 +97,13 @@ export const DEFAULT_SETTINGS: Settings = {
         reserveObjectiveWeight: 0.25,
         signSynergy: true,
         synergyTimeLimitSec: 300,
+        // Outside hitters tire fastest, then the middle blockers, then the
+        // opposite; the setter and the libero are (almost) never replaced.
+        substitutionOrder: [
+            "Front Outside Hitter", "Back Outside Hitter",
+            "Front Middle Blocker", "Back Middle Blocker",
+            "Opposite",
+        ],
     },
     availability: {
         declineExceptionalMinGain: 5,
@@ -173,6 +189,7 @@ export function resolveSettings(override?: unknown): Settings {
     const s = clone(DEFAULT_SETTINGS);
     merge(s as unknown as Record<string, unknown>, override, "", FREE_KEYS);
     sanitizeLiberoPhases(s);
+    sanitizeSubstitutionOrder(s);
     if (!(s.lineup.reserveObjectiveWeight < s.lineup.subObjectiveWeight && s.lineup.subObjectiveWeight < 1)) {
         console.warn(
             "⚠️  settings.lineup: expected 0 < reserveObjectiveWeight < subObjectiveWeight < 1 " +
@@ -180,6 +197,25 @@ export function resolveSettings(override?: unknown): Settings {
         );
     }
     return s;
+}
+
+/** 5-1 starter slots a substitution order may list. */
+export const STARTER_SLOTS = [
+    "Setter", "Front Outside Hitter", "Back Outside Hitter", "Opposite",
+    "Front Middle Blocker", "Back Middle Blocker", "Libero",
+];
+
+/** Substitution order: drops unknown slots and duplicates (with a warning). */
+function sanitizeSubstitutionOrder(s: Settings): void {
+    const out: string[] = [];
+    for (const slot of s.lineup.substitutionOrder) {
+        if (!STARTER_SLOTS.includes(slot)) {
+            console.warn(`⚠️  settings.lineup.substitutionOrder: unknown slot "${slot}", ignored (expected one of ${STARTER_SLOTS.join(", ")}).`);
+        } else if (out.includes(slot)) {
+            console.warn(`⚠️  settings.lineup.substitutionOrder: "${slot}" listed twice, kept once.`);
+        } else out.push(slot);
+    }
+    s.lineup.substitutionOrder = out;
 }
 
 /**

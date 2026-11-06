@@ -16,6 +16,7 @@ import {
     STAT_HELP, TRAIT_HELP, SIGN_HELP, LIBERO_SIGN_GROUPS, SETTER_SIGN_HELP, CONNECTION_HELP,
 } from "./schema";
 import type { WorkerMessage, WorkerRequest } from "./worker";
+import { STARTER_SLOTS } from "../src/config/settings";
 import type { RoleName } from "../src/types";
 
 // ─── DOM helpers ────────────────────────────────────────────────────────────
@@ -276,10 +277,30 @@ function renderAdvanced(): void {
         return el("div", { class: "pos-row" }, label, sel);
     };
 
+    // Substitution order: rank k = k-th starter to leave for their substitute.
+    const ordinal = (k: number) => `${k}${k === 1 ? "st" : k === 2 ? "nd" : k === 3 ? "rd" : "th"} out`;
+    const orderRow = (k: number) => {
+        const sel = el("select", { "aria-label": `Substitution ${ordinal(k + 1)}` },
+            el("option", { value: "" }, "— (nobody)"),
+            ...STARTER_SLOTS.map((slot) => el("option", { value: slot }, slot)));
+        sel.value = s.lineup.substitutionOrder[k] ?? "";
+        sel.addEventListener("change", () => {
+            const next = [...s.lineup.substitutionOrder];
+            // A slot already listed elsewhere swaps ranks with the one replaced here.
+            const at = next.indexOf(sel.value);
+            if (!sel.value) next.splice(k);
+            else { if (at >= 0 && next[k]) next[at] = next[k]; next[k] = sel.value; }
+            s.lineup.substitutionOrder = next.filter((slot, i) => slot && next.indexOf(slot) === i);
+            changed(); renderAdvanced();
+        });
+        return el("div", { class: "pos-row" }, el("span", { class: "pos-trait" }, ordinal(k + 1)), sel);
+    };
+    const orderRows = Array.from({ length: Math.min(STARTER_SLOTS.length, s.lineup.substitutionOrder.length + 1) }, (_, k) => orderRow(k));
+
     $("advancedControls").replaceChildren(
         sec("5-1 lineup",
             slider({ label: "Bench weight (λ)", min: 0.05, max: 0.95, step: 0.05,
-                help: "Weight of the substitutes in the lineup objective. Must stay below 1 so the best players start.",
+                help: "Weight of the substitutes in the lineup objective, relative to a starter (≈ their share of playing time: a substitute playing 2/5 of the set vs 3/5 for the starter ≈ 0.67). Also weighs the bench chemistry (average change of the sign chemistry as substitutions accumulate). Must stay below 1 so the best players start.",
                 get: () => s.lineup.subObjectiveWeight, set: (v) => (s.lineup.subObjectiveWeight = v) }),
             slider({ label: "Injury reserve weight (λr)", min: 0.05, max: 0.95, step: 0.05,
                 help: "Weight of the injury reserves. Must stay below the bench weight.",
@@ -289,6 +310,11 @@ function renderAdvanced(): void {
             numberField({ label: "Chemistry search time limit (s)", min: 5, step: 5,
                 help: "Past this limit the best lineup found so far is kept (optimality not proven).",
                 get: () => s.lineup.synergyTimeLimitSec, set: (v) => (s.lineup.synergyTimeLimitSec = v) }),
+        ),
+        el("div", { class: "group" },
+            el("h4", {}, "Substitution order (sign chemistry)"),
+            el("p", { class: "ctl-help" }, "Order in which the starters leave for their own substitute during a set. Substitutions accumulate (a substitute stays on court): the lineup's chemistry is also evaluated after 1, 2, … substitutions, and the average change counts with the bench weight. Starters not listed (by default the setter and the libero) are never replaced."),
+            el("div", { class: "grid2" }, ...orderRows),
         ),
         sec("Progression & academy",
             numberField({ label: "Decliner kept if lineup gain ≥", min: 0, step: 0.5,

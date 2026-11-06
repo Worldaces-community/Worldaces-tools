@@ -130,6 +130,7 @@ academy, libero rotation, recruitment and roster rules are documented in
 ```bash
 npm ci
 npm run typecheck        # CLI + browser bundle (the engine must stay Node-free)
+npm test                 # vitest (sign chemistry, accumulated substitutions, bench)
 npm run build:browser    # → web/dist/ (index.html, app.js, worker.js…)
 npx http-server web/dist # or any static server, then open http://localhost:8080
 npm run verify-lineup -- example_roster.csv example_params.json 14 0
